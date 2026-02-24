@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/LSD08KM/115RenamePlus
-// @version             0.8.17
+// @version             0.8.18
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus：彻底移除 jQuery 依赖，原生 DOM 实现，增强异常兜底与稳定性 
@@ -202,7 +202,13 @@
      * @param ifAddDate   是否添加时间
      */
     function rename(call, site, rntype, ifAddDate ) {
-        // 获取所有已选择的文件
+        // 获取所有已选择的文件（原生 DOM，绕过 $ 封装）
+        const selected = document.querySelectorAll('.file.selected, .list-item.selected, .list-item.active');
+        if (!selected || selected.length === 0) {
+            GM_notification({ text: '未选中文件', timeout: 2000 });
+            return;
+        }
+
         let list = $("iframe[rel='wangpan']")
             .contents()
             .find("li.selected")
