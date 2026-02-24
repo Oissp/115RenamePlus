@@ -1,10 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/LSD08KM/115RenamePlus
-// @version             0.8.13
-// @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
-// @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
-// @require             https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js 格式化视频分段 4K 增加icon 
+// @version             0.8.13 格式化视频分段 4K 增加icon 
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
 // @author              db117, FAN0926, LSD08KM
 // @include             https://115.com/*
@@ -78,59 +75,35 @@
      * 添加按钮定时任务(检测到可以添加时添加按钮)
      */
     function buttonInterval() {
-        let open_dir = $("div#js_float_content li[val='open_dir']");
-        if (open_dir.length !== 0 && $("li#rename_list").length === 0) {
-            open_dir.before(rename_list);
-            $("a#rename_video_avmoo").click(
-                function () {
-                    rename(renameAvmoo, "avmoo", "video", true);
-                });	
-			$("a#rename_video_javbus").click(
-			    function () {
-			        rename(renameJavbus, "javbus", "video", true);
-			    });	
-			$("a#rename_video_javdb").click(
-			    function () {
-			        rename(renameJavdb, "javdb", "video", true);
-			    });	
-			$("a#rename_video_FC2").click(
-			    function () {
-			        rename(renameFc2, "fc2", "video", true);
-			    });	
-			$("a#rename_video_mgstage").click(
-			    function () {
-			        rename(renameMgstage, "mgstage", "video", true);
-			    });	
-			$("a#rename_video_avmoo_javbus").click(
-			    function () {
-			        rename(renameAvmooJavbus, "avmoo", "video", true);
-			    });	
-			$("a#rename_video_javbus_detail").click(
-			    function () {
-			        rename(renameJavbusDetail, "javbus", "video", true);
-			    });	
-			$("a#video_part_format").click(
-			    function () {
-			        videoPartFormat();
-			    });	
-			$("a#rename_picture_avmoo").click(
-			    function () {
-			        rename(renameAvmoo, "avmoo", "picture", true);
-			    });	
-			$("a#rename_picture_javbus").click(
-			    function () {
-			        rename(renameJavbus, "javbus", "picture", true);
-			    });	
-			$("a#rename_picture_FC2").click(
-			    function () {
-			        rename(renameFc2, "fc2", "picture", true);
-			    });	
-			$("a#rename_picture_mgstage").click(
-			    function () {
-			        rename(renameMgstage, "mgstage", "picture", true);
-			    });	
-            console.log("添加按钮");
-            // 结束定时任务
+        const floatContent = document.querySelector("div#js_float_content");
+        if (!floatContent) return;
+
+        const openDir = floatContent.querySelector("li[val='open_dir']");
+        const renameListExist = document.querySelector("li#rename_list");
+
+        if (openDir && !renameListExist) {
+            openDir.before(rename_list);
+
+            const bind = (selector, handler) => {
+                const el = document.querySelector(selector);
+                if (el) el.addEventListener("click", handler);
+            };
+
+            bind("#rename_video_avmoo", () => rename(renameAvmoo, "avmoo", "video", true));
+            bind("#rename_video_javbus", () => rename(renameJavbus, "javbus", "video", true));
+            bind("#rename_video_javdb", () => rename(renameJavdb, "javdb", "video", true));
+            bind("#rename_video_FC2", () => rename(renameFc2, "fc2", "video", true));
+            bind("#rename_video_mgstage", () => rename(renameMgstage, "mgstage", "video", true));
+            bind("#rename_video_avmoo_javbus", () => rename(renameAvmooJavbus, "avmoo", "video", true));
+            bind("#rename_video_javbus_detail", () => rename(renameJavbusDetail, "javbus", "video", true));
+            bind("#video_part_format", () => videoPartFormat());
+
+            bind("#rename_picture_avmoo", () => rename(renameAvmoo, "avmoo", "picture", true));
+            bind("#rename_picture_javbus", () => rename(renameJavbus, "javbus", "picture", true));
+            bind("#rename_picture_FC2", () => rename(renameFc2, "fc2", "picture", true));
+            bind("#rename_picture_mgstage", () => rename(renameMgstage, "mgstage", "picture", true));
+
+            console.log("添加按钮（原生 DOM）");
             clearInterval(interval);
         }
     }
