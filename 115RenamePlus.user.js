@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/LSD08KM/115RenamePlus
-// @version             0.8.19
+// @version             0.8.20
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus：彻底移除 jQuery 依赖，原生 DOM 实现，增强异常兜底与稳定性 
@@ -219,9 +219,9 @@
             let suffix;
 
             if (file_type === "0") {
-                fid = v.getAttribute("cate_id");
+                fid = v.dataset.cateId || v.getAttribute("data-cate-id");
             } else {
-                fid = v.getAttribute("file_id");
+                fid = v.dataset.fileId || v.getAttribute("data-file-id");
                 let lastIndexOf = file_name.lastIndexOf('.');
                 if (lastIndexOf !== -1) {
                     suffix = file_name.substring(lastIndexOf);
