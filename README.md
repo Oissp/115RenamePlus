@@ -9,6 +9,13 @@
 
 ## 功能
 
+### 0.8.12 更新说明
+
+- 修复 FC2 分段文件（如 `FC2PPV-4679178-1`、`FC2-PPV-4679178_1`）无法通过 javdb 重命名的问题
+- FC2 编号在搜索阶段会先剥离分段，再统一规范为 `FC2-PPV-xxxxx`
+- 新增对番号尾部字母分段的识别（如 `STAR-590A`、`ABP-123B`）
+
+
 右击文件夹或文件，点击站点选项，自动重命名。
 
 <img src="https://github.com/LSD08KM/115RenamePlus/blob/master/img/01.png" height="230px;" />
@@ -20,7 +27,7 @@
 
 支持多选。
 
-支持 javbus、avmoo、FC2、mgstage、javdb（自动兼容不同编号格式匹配）。
+支持 javbus、avmoo、FC2、mgstage、javdb（自动兼容不同编号格式匹配，FC2 分段文件可正常命中）。
 
 ### 改名后的格式为：
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/LSD08KM/115RenamePlus
-// @version             0.8.11 格式化视频分段 4K 增加icon 
+// @version             0.8.12 格式化视频分段 4K 增加icon 
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
 // @author              db117, FAN0926, LSD08KM
 // @include             https://115.com/*
@@ -1145,6 +1145,10 @@
      */
     function getVideoCode(title, type="nomal") {
         title = title.toUpperCase();
+        // FC2：先剥离结尾分段（-1 / _1），避免影响 javdb 匹配
+        if (type === "fc2") {
+            title = title.replace(/([\-_])(\d+)$/, "");
+        }
         console.log("传入title: " + title);
         // 判断是否多集
         let part;  //FHD1 hhb1
