@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/LSD08KM/115RenamePlus
-// @version             0.8.16
+// @version             0.8.17
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus：彻底移除 jQuery 依赖，原生 DOM 实现，增强异常兜底与稳定性 
@@ -166,7 +166,7 @@
             openDir.before(renameNode);
 
             const bind = (selector, handler) => {
-                const el = document.querySelector(selector);
+                const el = floatContent.querySelector(selector);
                 if (!el) return;
                 el.addEventListener("mousedown", e => {
                     e.preventDefault();
