@@ -202,6 +202,9 @@
                 let $item = $(v);
                 // 原文件名称
                 let file_name = $item.attr("title");
+                if (!file_name) {
+                    return;
+                }
                 // 文件类型
                 let file_type = $item.attr("file_type");
 
