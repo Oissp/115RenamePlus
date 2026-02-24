@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/LSD08KM/115RenamePlus
-// @version             0.8.18
+// @version             0.8.19
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus：彻底移除 jQuery 依赖，原生 DOM 实现，增强异常兜底与稳定性 
@@ -209,67 +209,47 @@
             return;
         }
 
-        let list = $("iframe[rel='wangpan']")
-            .contents()
-            .find("li.selected")
-            .each(function (index, v) {
-                let $item = $(v);
-                // 原文件名称
-                let file_name = $item.attr("title");
-                if (!file_name) {
-                    return;
-                }
-                // 文件类型
-                let file_type = $item.attr("file_type");
+        selected.forEach(v => {
+            // 原文件名称
+            let file_name = v.getAttribute("title");
+            if (!file_name) return;
 
-                // 文件id
-                let fid;
-                // 后缀名
-                let suffix;
-                if (file_type === "0") {
-                    // 文件夹
-                    fid = $item.attr("cate_id");
-                } else {
-                    // 文件
-                    fid = $item.attr("file_id");
-                    // 处理后缀
-                    let lastIndexOf = file_name.lastIndexOf('.');
-                    if (lastIndexOf !== -1) {
-                        suffix = file_name.substring(lastIndexOf, file_name.length);
-                        file_name = file_name.substring(0, lastIndexOf);
-                    }
+            let file_type = v.getAttribute("file_type");
+            let fid;
+            let suffix;
+
+            if (file_type === "0") {
+                fid = v.getAttribute("cate_id");
+            } else {
+                fid = v.getAttribute("file_id");
+                let lastIndexOf = file_name.lastIndexOf('.');
+                if (lastIndexOf !== -1) {
+                    suffix = file_name.substring(lastIndexOf);
+                    file_name = file_name.substring(0, lastIndexOf);
                 }
-                if (fid && file_name) {
-                    let VideoCode;
-					// 正则匹配番号
-                    if (site == "mgstage"){
-                        VideoCode = getVideoCode(file_name,"mgstage");
-                    }else if (site == "fc2"){
-                        VideoCode = getVideoCode(file_name,"fc2");
-                    }else{
-                        VideoCode = getVideoCode(file_name);
-                    }
-                    console.log("正则匹配番号:" + VideoCode.fh);
-                    if (VideoCode.fh) {
-						if ( rntype=="video" ){
-							// 校验是否是中文字幕
-							let ifChineseCaptions = checkifChineseCaptions(VideoCode.fh, file_name);
-							// 执行查询
-							console.log("开始查询");
-							call(fid, rntype, VideoCode.fh, suffix, VideoCode.if4k, ifChineseCaptions, VideoCode.part, ifAddDate);
-						} else if ( rntype=="picture" ){
-							// 是图片时，向part传图片名冗余，不要中字判断，只在页面获取编号
-							// 图片名冗余
-							let picCaptions = getPicCaptions(VideoCode.fh, file_name);
-							let ifChineseCaptions;
-							// 执行查询
-							console.log("开始查询");
-							call(fid, rntype, VideoCode.fh, suffix, VideoCode.if4k, ifChineseCaptions, picCaptions, ifAddDate);
-						}
-                        
-                    }
-                }
-            });
+            }
+
+            if (!fid || !file_name) return;
+
+            let VideoCode;
+            if (site === "mgstage") {
+                VideoCode = getVideoCode(file_name, "mgstage");
+            } else if (site === "fc2") {
+                VideoCode = getVideoCode(file_name, "fc2");
+            } else {
+                VideoCode = getVideoCode(file_name);
+            }
+
+            if (!VideoCode.fh) return;
+
+            if (rntype === "video") {
+                let ifChineseCaptions = checkifChineseCaptions(VideoCode.fh, file_name);
+                call(fid, rntype, VideoCode.fh, suffix, VideoCode.if4k, ifChineseCaptions, VideoCode.part, ifAddDate);
+            } else if (rntype === "picture") {
+                let picCaptions = getPicCaptions(VideoCode.fh, file_name);
+                call(fid, rntype, VideoCode.fh, suffix, VideoCode.if4k, undefined, picCaptions, ifAddDate);
+            }
+        });
 		// if(!Main.ReInstance({type:'', star:'', is_q: '', is_share:''})){window.location.reload();}
 		// if(list){window.location.reload();}
     }
