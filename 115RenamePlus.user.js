@@ -130,6 +130,17 @@
 
             html() {
                 return nodes[0]?.innerHTML;
+            },
+
+            contents() {
+                let result = [];
+                nodes.forEach(n => {
+                    if (n && n.tagName === "IFRAME") {
+                        const doc = n.contentDocument || n.contentWindow?.document;
+                        if (doc) result.push(doc);
+                    }
+                });
+                return wrap(result);
             }
         };
     }
