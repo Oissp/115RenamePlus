@@ -82,7 +82,11 @@
         const renameListExist = document.querySelector("li#rename_list");
 
         if (openDir && !renameListExist) {
-            openDir.before(rename_list[0]);
+            const temp = document.createElement("div");
+            temp.innerHTML = rename_list.trim();
+            const renameNode = temp.firstElementChild;
+            if (!renameNode) return;
+            openDir.before(renameNode);
 
             const bind = (selector, handler) => {
                 const el = document.querySelector(selector);
