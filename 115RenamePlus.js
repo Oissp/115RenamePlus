@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/LSD08KM/115RenamePlus
-// @version             0.8.13 格式化视频分段 4K 增加icon 
+// @version             0.8.14 格式化视频分段 4K 增加icon 
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
 // @author              db117, FAN0926, LSD08KM
 // @include             https://115.com/*
@@ -70,6 +70,69 @@
     let javdbSearch = javdbBase + "/search?q=";
 
     'use strict';
+
+    // ===== Minimal $ helper (no jQuery dependency) =====
+    function $(selector, context) {
+        context = context || document;
+
+        // HTML string
+        if (typeof selector === "string" && selector.trim().startsWith("<")) {
+            const tpl = document.createElement("template");
+            tpl.innerHTML = selector.trim();
+            return wrap(Array.from(tpl.content.children));
+        }
+
+        // selector string
+        if (typeof selector === "string") {
+            return wrap(Array.from(context.querySelectorAll(selector)));
+        }
+
+        // DOM node
+        if (selector instanceof Node) {
+            return wrap([selector]);
+        }
+
+        // NodeList / Array
+        if (selector instanceof NodeList || Array.isArray(selector)) {
+            return wrap(Array.from(selector));
+        }
+
+        return wrap([]);
+    }
+
+    function wrap(nodes) {
+        return {
+            length: nodes.length,
+            0: nodes[0],
+
+            each(fn) {
+                nodes.forEach((el, i) => fn.call(el, i, el));
+                return this;
+            },
+
+            find(sel) {
+                let found = [];
+                nodes.forEach(n => found.push(...n.querySelectorAll(sel)));
+                return wrap(found);
+            },
+
+            attr(name, value) {
+                if (value === undefined) {
+                    return nodes[0]?.getAttribute(name);
+                }
+                nodes.forEach(n => n.setAttribute(name, value));
+                return this;
+            },
+
+            text() {
+                return nodes.map(n => n.textContent).join("");
+            },
+
+            html() {
+                return nodes[0]?.innerHTML;
+            }
+        };
+    }
 
     /**
      * 添加按钮定时任务(检测到可以添加时添加按钮)
