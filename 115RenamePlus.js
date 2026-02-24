@@ -14,6 +14,7 @@
 // @domain              avsox.website
 // @domain              adult.contents.fc2.com
 // @domain              mgstage.com
+// @domain              javdb.com
 // @grant               GM_notification
 // @grant               GM_xmlhttpRequest
 // ==/UserScript==
@@ -28,6 +29,7 @@
 				<a id="rename_video_avmoo_javbus" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名avmoo+javbus</span></a>
                 <a id="rename_video_avmoo" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名avmoo</span></a>
                 <a id="rename_video_javbus" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名javbus</span></a>
+                <a id="rename_video_javdb" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名javdb</span></a>
                 <a id="rename_video_FC2" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名FC2</span></a>
                 <a id="rename_video_mgstage" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名mgstage</span></a>		
 				<!--
@@ -63,6 +65,10 @@
     //mgstage
     let mgstageSearch = "https://www.mgstage.com/product/product_detail/";
 
+    // javdb
+    let javdbBase = "https://javdb.com";
+    let javdbSearch = javdbBase + "/search?q=";
+
     'use strict';
 
     /**
@@ -79,6 +85,10 @@
 			$("a#rename_video_javbus").click(
 			    function () {
 			        rename(renameJavbus, "javbus", "video", true);
+			    });	
+			$("a#rename_video_javdb").click(
+			    function () {
+			        rename(renameJavdb, "javdb", "video", true);
 			    });	
 			$("a#rename_video_FC2").click(
 			    function () {
@@ -221,25 +231,37 @@
                 onload: xhr => {
                     let response = $(xhr.responseText);
                     if (!(response.find("div.alert").length)) {
-						/*
-                        // 标题
-                        title = response
-                            .find("div.photo-frame img")
-                            .attr("title");
-                        // 时间
-                        date = response
-                            .find("div.photo-info > span")
-                            .html();
-                        date = date.match(/\d{4}\-\d{2}\-\d{2}/);
-						*/
-                        // 番号
-                        fh_o = response
-                            .find("div.photo-info date:first")
-                            .html();
-                        // 详情页
-                        moviePage = response
-                            .find("a.movie-box")
-                            .attr("href");
+                        // 获取所有搜索结果，找到与原始番号完全匹配的结果
+                        let movieBoxes = response.find("a.movie-box");
+                        let matchedBox = null;
+                        
+                        movieBoxes.each(function() {
+                            let box = $(this);
+                            let boxFh = box.find("div.photo-info date:first").html();
+                            if (boxFh) {
+                                // 完全匹配（忽略大小写）
+                                if (boxFh.toUpperCase() === fh.toUpperCase()) {
+                                    matchedBox = box;
+                                    return false; // 找到匹配的，退出循环
+                                }
+                                // 也检查带连字符和不带连字符的情况
+                                let normalizedBoxFh = boxFh.toUpperCase().replace(/-/g, '');
+                                let normalizedFh = fh.toUpperCase().replace(/-/g, '');
+                                if (normalizedBoxFh === normalizedFh) {
+                                    matchedBox = box;
+                                    return false;
+                                }
+                            }
+                        });
+                        
+                        if (matchedBox) {
+                            fh_o = matchedBox.find("div.photo-info date:first").html();
+                            moviePage = matchedBox.attr("href");
+                            console.log("找到完全匹配的番号: " + fh_o);
+                        } else {
+                            console.log("没有找到完全匹配的番号: " + fh + "，搜索结果中无匹配项");
+                        }
+                        
                         console.log("获取到 " + fh_o );
                         resolve(moviePage);
                     }
@@ -383,7 +405,7 @@
                 }else if (searchUrl !== javbusUncensoredSearch) {
                     console.log("查询无码 " + searchUrl);
                     // 进行无码重查询
-                    requestJavbus(fid, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, javbusUncensoredSearch);
+                    requestJavbus(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, javbusUncensoredSearch);
                 }else {
                     resolve("没有查到结果");
                 }
@@ -424,25 +446,38 @@
                 url: url_s,
                 onload: xhr => {
                     let response = $(xhr.responseText);
-					/*
-					// 标题
-					title = response
-					    .find("div.photo-frame img")
-					    .attr("title");
-					// 时间
-					date = response
-					        .find("div.photo-info > span")
-					        .html();
-					date = date.match(/\d{4}\-\d{2}\-\d{2}/);
-					*/
-                    // 番号
-                    fh_o = response
-                        .find("div.photo-info date:first")
-                        .html();
-                    // 详情页
-                    moviePage = response
-                        .find("a.movie-box")
-                        .attr("href");
+                    
+                    // 获取所有搜索结果，找到与原始番号完全匹配的结果
+                    let movieBoxes = response.find("a.movie-box");
+                    let matchedBox = null;
+                    
+                    movieBoxes.each(function() {
+                        let box = $(this);
+                        let boxFh = box.find("div.photo-info date:first").html();
+                        if (boxFh) {
+                            // 完全匹配（忽略大小写）
+                            if (boxFh.toUpperCase() === fh.toUpperCase()) {
+                                matchedBox = box;
+                                return false; // 找到匹配的，退出循环
+                            }
+                            // 也检查带连字符和不带连字符的情况
+                            let normalizedBoxFh = boxFh.toUpperCase().replace(/-/g, '');
+                            let normalizedFh = fh.toUpperCase().replace(/-/g, '');
+                            if (normalizedBoxFh === normalizedFh) {
+                                matchedBox = box;
+                                return false;
+                            }
+                        }
+                    });
+                    
+                    if (matchedBox) {
+                        fh_o = matchedBox.find("div.photo-info date:first").html();
+                        moviePage = matchedBox.attr("href");
+                        console.log("找到完全匹配的番号: " + fh_o);
+                    } else {
+                        console.log("没有找到完全匹配的番号: " + fh + "，搜索结果中无匹配项");
+                    }
+                    
                     console.log("获取到 " +  fh_o );
                     resolve(moviePage);
                 }
@@ -520,6 +555,152 @@
     }
 
     /**
+     * 通过javdb进行查询
+     * 请求javdb,并请求115进行改名
+     * @param fid               文件id
+     * @param rntype            改名类型 video picture
+     * @param fh                番号
+     * @param suffix            后缀
+     * @param ifChineseCaptions   是否有中文字幕
+     * @param part              视频分段，图片冗余文件名 
+     * @param ifAddDate              是否添加时间 
+     */
+    function renameJavdb(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate) {
+        requestJavdb(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, javdbSearch);
+    }
+    function requestJavdb(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, searchUrl) {
+        let title;
+        let fh_o;   //网页上的番号
+        let date;
+        let moviePage;
+        let actors = [];
+        let url_s = searchUrl + fh;
+        let getJavdbSearch = new Promise((resolve, reject) => {
+            console.log("处理搜索页：" + url_s);
+            GM_xmlhttpRequest({
+                method: "GET",
+                url: url_s,
+                onload: xhr => {
+                    let response = $(xhr.responseText);
+                    
+                    // 获取所有搜索结果，找到与原始番号完全匹配的结果
+                    let movieItems = response.find(".movie-list .item");
+                    let matchedItem = null;
+                    
+                    movieItems.each(function() {
+                        let item = $(this);
+                        let itemFh = item.find(".video-title strong").text().trim();
+                        if (itemFh) {
+                            // 完全匹配（忽略大小写）
+                            if (itemFh.toUpperCase() === fh.toUpperCase()) {
+                                matchedItem = item;
+                                return false; // 找到匹配的，退出循环
+                            }
+                            // 也检查带连字符和不带连字符的情况
+                            let normalizedItemFh = itemFh.toUpperCase().replace(/-/g, '');
+                            let normalizedFh = fh.toUpperCase().replace(/-/g, '');
+                            if (normalizedItemFh === normalizedFh) {
+                                matchedItem = item;
+                                return false;
+                            }
+                        }
+                    });
+                    
+                    if (matchedItem) {
+                        fh_o = matchedItem.find(".video-title strong").text().trim();
+                        let href = matchedItem.find("a").attr("href");
+                        moviePage = href ? javdbBase + href : null;
+                        console.log("找到完全匹配的番号: " + fh_o);
+                    } else {
+                        console.log("没有找到完全匹配的番号: " + fh + "，搜索结果中无匹配项");
+                    }
+                    
+                    console.log("获取到 " + fh_o);
+                    resolve(moviePage);
+                }
+            });
+        });
+        function getJavdbDetail(){
+            return new Promise((resolve, reject) => {
+                if ( rntype=="picture" ){
+                    console.log("跳过详情页");
+                    resolve();
+                } else if ( rntype=="video" ){
+                    if(moviePage){
+                        console.log("处理详情页：" + moviePage);
+                        GM_xmlhttpRequest({
+                            method: "GET",
+                            url: moviePage,
+                            onload: xhr => {
+                                let response = $(xhr.responseText);
+                                // 标题
+                                title = response
+                                    .find(".current-title")
+                                    .text()
+                                    .trim();
+                                // 移除番号前缀
+                                if (title && fh_o && title.startsWith(fh_o)) {
+                                    title = title.slice(fh_o.length).trim();
+                                }
+                                
+                                // 获取所有标签
+                                let labels = {};
+                                response.find(".panel-block").each(function() {
+                                    let strong = $(this).find("strong");
+                                    if (strong.length) {
+                                        let key = strong.text().replace(":", "").trim();
+                                        labels[key] = $(this);
+                                    }
+                                });
+                                
+                                // 日期
+                                if (labels["日期"]) {
+                                    let dateText = labels["日期"].find(".value").text().trim();
+                                    date = dateText.match(/\d{4}-\d{2}-\d{2}/);
+                                }
+                                
+                                // 演员们
+                                if (labels["演員"]) {
+                                    labels["演員"].find(".value a").each(function(){
+                                        actors.push($(this).text().trim());
+                                    });
+                                }
+                                console.log('演员 '+actors);
+                                resolve();
+                            }
+                        });
+                    }else{
+                        resolve();
+                    }
+                }
+            });
+        }
+        function setName(){
+            return new Promise((resolve, reject) => {
+                if(moviePage){
+                    let actor = actors.toString();
+                    console.log(actor);
+                    // 构建新名称
+                    let newName = buildNewName(fh_o, rntype, suffix, if4k, ifChineseCaptions, part, title, date, actor, ifAddDate);                    
+                    if (newName) {
+                        // 修改名称
+                        send_115(fid, newName, fh_o);
+                        console.log("新名: "+newName);
+                    }
+                    resolve(newName);
+                }else {
+                    resolve("没有查到结果");
+                }
+            });
+        }
+        getJavdbSearch.then(getJavdbDetail)
+            .then(setName,setName)
+            .then(function(result){
+                console.log("改名结束，" + result);
+            });
+    }
+
+    /**
      * 通过avmoo进行查询
      * 请求avmoo,并请求115进行改名
      * @param fid               文件id
@@ -549,25 +730,37 @@
                 onload: xhr => {
                     let response = $(xhr.responseText);
                     if (!(response.find("div.alert").length)) {
-						/*
-                        // 标题
-                        title = response
-                            .find("div.photo-frame img")
-                            .attr("title");
-                        // 时间
-                        date = response
-                            .find("div.photo-info > span")
-                            .html();
-                        date = date.match(/\d{4}\-\d{2}\-\d{2}/);
-						*/
-                        // 番号
-                        fh_o = response
-                            .find("div.photo-info date:first")
-                            .html();
-                        // 详情页
-                        moviePage = response
-                            .find("a.movie-box")
-                            .attr("href");
+                        // 获取所有搜索结果，找到与原始番号完全匹配的结果
+                        let movieBoxes = response.find("a.movie-box");
+                        let matchedBox = null;
+                        
+                        movieBoxes.each(function() {
+                            let box = $(this);
+                            let boxFh = box.find("div.photo-info date:first").html();
+                            if (boxFh) {
+                                // 完全匹配（忽略大小写）
+                                if (boxFh.toUpperCase() === fh.toUpperCase()) {
+                                    matchedBox = box;
+                                    return false; // 找到匹配的，退出循环
+                                }
+                                // 也检查带连字符和不带连字符的情况
+                                let normalizedBoxFh = boxFh.toUpperCase().replace(/-/g, '');
+                                let normalizedFh = fh.toUpperCase().replace(/-/g, '');
+                                if (normalizedBoxFh === normalizedFh) {
+                                    matchedBox = box;
+                                    return false;
+                                }
+                            }
+                        });
+                        
+                        if (matchedBox) {
+                            fh_o = matchedBox.find("div.photo-info date:first").html();
+                            moviePage = matchedBox.attr("href");
+                            console.log("找到完全匹配的番号: " + fh_o);
+                        } else {
+                            console.log("没有找到完全匹配的番号: " + fh + "，搜索结果中无匹配项");
+                        }
+                        
                         console.log("获取到 " + fh_o );
                         resolve(moviePage);
                     }
@@ -796,14 +989,33 @@
         if (title.indexOf("中文字幕") !== -1) {
             return true;
         }
-		if (title.indexOf("中字") !== -1) {
+        if (title.indexOf("中字") !== -1) {
             return true;
         }
-		let regExp = new RegExp("[_-]?C(?!D)");
+        // 检查标题中是否包含明确的字幕标识，如"C"字符（但不是作为番号一部分）
+        // 排除番号本身包含C的情况，只看标题中其他位置的C
+        let regExp = new RegExp("[_-]?C(?!D)");
         let match = title.toUpperCase().match(regExp);
         if (match) {
-            return true;
+            // 确保匹配到的C不在番号部分
+            let upperTitle = title.toUpperCase();
+            let fhUpper = fh.toUpperCase();
+            let cMatch = match[0];
+            
+            // 查找匹配到的C在标题中的位置
+            let cIndex = upperTitle.indexOf(cMatch);
+            // 查找番号在标题中的位置
+            let fhIndex = upperTitle.indexOf(fhUpper);
+            let fhEndIndex = fhIndex + fhUpper.length;
+            
+            // 如果C的位置在番号之后，且不在番号内部，则认为是字幕标识
+            if (cIndex >= 0 && fhIndex >= 0) {
+                if (cIndex < fhIndex || cIndex >= fhEndIndex) {
+                    return true;
+                }
+            }
         }
+        return false;
     }
 	
     /**
@@ -990,7 +1202,7 @@
 			if(t){
 				console.log("找到番号:" + t[0]);
 				console.log("查找番号:" + t[3]);
-				t = t[1];
+				t = t[3];
 			}
 		}else {
 			t = title.match(/T28[\-_]\d{3,4}/);
@@ -1067,6 +1279,26 @@
 				if4k: if4k,
             };
         }
+    }
+
+    /**
+     * 从可能包含额外信息的番号中提取标准格式的番号
+     * 例如：从 YRNKMTNDVAJ-655 中提取 DVAJ-655
+     * @param fullCode 完整的番号字符串
+     * @return 标准格式的番号
+     */
+    function extractStandardCode(fullCode) {
+        if (!fullCode) return null;
+        
+        // 尝试匹配标准格式：字母+数字，如 ABC-123 或 ABC123
+        // 匹配模式：2-6个字母，可选连字符，3-5个数字
+        let standardMatch = fullCode.match(/[A-Z]{2,6}-?\d{3,5}/i);
+        if (standardMatch) {
+            return standardMatch[0].replace(/-/g, '-'); // 确保格式一致
+        }
+        
+        // 如果没有找到标准格式，返回null
+        return null;
     }
 
 })();
