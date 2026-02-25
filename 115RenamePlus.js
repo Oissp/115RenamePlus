@@ -1,10 +1,9 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/LSD08KM/115RenamePlus
-// @version             0.8.20
+// @version             0.8.10 格式化视频分段 4K 增加icon
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
-// @description         115RenamePlus：彻底移除 jQuery 依赖，原生 DOM 实现，增强异常兜底与稳定性 
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
 // @author              db117, FAN0926, LSD08KM
 // @include             https://115.com/*
@@ -29,19 +28,9 @@
     // 按钮
     let rename_list = `
             <li id="rename_list">
-				<a id="rename_video_avmoo_javbus" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名avmoo+javbus</span></a>
-                <a id="rename_video_avmoo" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名avmoo</span></a>
                 <a id="rename_video_javbus" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名javbus</span></a>
                 <a id="rename_video_javdb" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名javdb</span></a>
                 <a id="rename_video_FC2" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名FC2</span></a>
-                <a id="rename_video_mgstage" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名mgstage</span></a>		
-				<!--
-                <a id="rename_video_javbus_detail" class="mark" href="javascript:;"><i class="icon-operate ifo-linktask"></i><span>视频改名javbus详情页</span></a>
-                <a id="rename_picture_avmoo" class="mark" href="javascript:;"><i class="icon-operate ifo-cover"></i><span>图片改名avmoo</span></a>
-                <a id="rename_picture_javbus" class="mark" href="javascript:;"><i class="icon-operate ifo-cover"></i><span>图片改名javbus</span></a>				
-				<a id="rename_picture_FC2" class="mark" href="javascript:;"><i class="icon-operate ifo-cover"></i><span>图片改名FC2</span></a>
-				<a id="rename_picture_mgstage" class="mark" href="javascript:;"><i class="icon-operate ifo-cover"></i><span>图片改名mgstage</span></a>
-				-->
             </li>
         `;
     /**
@@ -74,122 +63,28 @@
 
     'use strict';
 
-    // ===== Minimal $ helper (no jQuery dependency) =====
-    function $(selector, context) {
-        context = context || document;
-
-        // HTML string
-        if (typeof selector === "string" && selector.trim().startsWith("<")) {
-            const tpl = document.createElement("template");
-            tpl.innerHTML = selector.trim();
-            return wrap(Array.from(tpl.content.children));
-        }
-
-        // selector string
-        if (typeof selector === "string") {
-            return wrap(Array.from(context.querySelectorAll(selector)));
-        }
-
-        // DOM node
-        if (selector instanceof Node) {
-            return wrap([selector]);
-        }
-
-        // NodeList / Array
-        if (selector instanceof NodeList || Array.isArray(selector)) {
-            return wrap(Array.from(selector));
-        }
-
-        return wrap([]);
-    }
-
-    function wrap(nodes) {
-        return {
-            length: nodes.length,
-            0: nodes[0],
-
-            each(fn) {
-                nodes.forEach((el, i) => fn.call(el, i, el));
-                return this;
-            },
-
-            find(sel) {
-                let found = [];
-                nodes.forEach(n => found.push(...n.querySelectorAll(sel)));
-                return wrap(found);
-            },
-
-            attr(name, value) {
-                if (value === undefined) {
-                    return nodes[0]?.getAttribute(name);
-                }
-                nodes.forEach(n => n.setAttribute(name, value));
-                return this;
-            },
-
-            text() {
-                return nodes.map(n => n.textContent).join("");
-            },
-
-            html() {
-                return nodes[0]?.innerHTML;
-            },
-
-            contents() {
-                let result = [];
-                nodes.forEach(n => {
-                    if (n && n.tagName === "IFRAME") {
-                        const doc = n.contentDocument || n.contentWindow?.document;
-                        if (doc) result.push(doc);
-                    }
-                });
-                return wrap(result);
-            }
-        };
-    }
-
     /**
      * 添加按钮定时任务(检测到可以添加时添加按钮)
      */
     function buttonInterval() {
-        const floatContent = document.querySelector("div#js_float_content");
-        if (!floatContent) return;
+        let open_dir = $("div#js_float_content li[val='open_dir']");
+        if (open_dir.length !== 0 && $("li#rename_list").length === 0) {
+            open_dir.before(rename_list);
+			$("a#rename_video_javbus").click(
+			    function () {
+			        rename(renameJavbus, "javbus", "video", true);
+			    });	
+			$("a#rename_video_javdb").click(
+			    function () {
+			        rename(renameJavdb, "javdb", "video", true);
+			    });	
+			$("a#rename_video_FC2").click(
+			    function () {
+			        rename(renameFc2, "fc2", "video", true);
+			    });	
 
-        const openDir = floatContent.querySelector("li[val='open_dir']");
-        const renameListExist = document.querySelector("li#rename_list");
-
-        if (openDir && !renameListExist) {
-            const temp = document.createElement("div");
-            temp.innerHTML = rename_list.trim();
-            const renameNode = temp.firstElementChild;
-            if (!renameNode) return;
-            openDir.before(renameNode);
-
-            const bind = (selector, handler) => {
-                const el = floatContent.querySelector(selector);
-                if (!el) return;
-                el.addEventListener("mousedown", e => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handler();
-                });
-            };
-
-            bind("#rename_video_avmoo", () => rename(renameAvmoo, "avmoo", "video", true));
-            bind("#rename_video_javbus", () => rename(renameJavbus, "javbus", "video", true));
-            bind("#rename_video_javdb", () => rename(renameJavdb, "javdb", "video", true));
-            bind("#rename_video_FC2", () => rename(renameFc2, "fc2", "video", true));
-            bind("#rename_video_mgstage", () => rename(renameMgstage, "mgstage", "video", true));
-            bind("#rename_video_avmoo_javbus", () => rename(renameAvmooJavbus, "avmoo", "video", true));
-            bind("#rename_video_javbus_detail", () => rename(renameJavbusDetail, "javbus", "video", true));
-            bind("#video_part_format", () => videoPartFormat());
-
-            bind("#rename_picture_avmoo", () => rename(renameAvmoo, "avmoo", "picture", true));
-            bind("#rename_picture_javbus", () => rename(renameJavbus, "javbus", "picture", true));
-            bind("#rename_picture_FC2", () => rename(renameFc2, "fc2", "picture", true));
-            bind("#rename_picture_mgstage", () => rename(renameMgstage, "mgstage", "picture", true));
-
-            console.log("添加按钮（原生 DOM）");
+            console.log("添加按钮");
+            // 结束定时任务
             clearInterval(interval);
         }
     }
@@ -202,54 +97,73 @@
      * @param ifAddDate   是否添加时间
      */
     function rename(call, site, rntype, ifAddDate ) {
-        // 获取所有已选择的文件（原生 DOM，绕过 $ 封装）
-        const selected = document.querySelectorAll('.file.selected, .list-item.selected, .list-item.active');
-        if (!selected || selected.length === 0) {
-            GM_notification({ text: '未选中文件', timeout: 2000 });
-            return;
-        }
+        // 获取所有已选择的文件
+        let list = $("iframe[rel='wangpan']")
+            .contents()
+            .find("li.selected")
+            .each(function (index, v) {
+                let $item = $(v);
+                // 原文件名称
+                let file_name = $item.attr("title");
+                // 文件类型
+                let file_type = $item.attr("file_type");
 
-        selected.forEach(v => {
-            // 原文件名称
-            let file_name = v.getAttribute("title");
-            if (!file_name) return;
-
-            let file_type = v.getAttribute("file_type");
-            let fid;
-            let suffix;
-
-            if (file_type === "0") {
-                fid = v.dataset.cateId || v.getAttribute("data-cate-id");
-            } else {
-                fid = v.dataset.fileId || v.getAttribute("data-file-id");
-                let lastIndexOf = file_name.lastIndexOf('.');
-                if (lastIndexOf !== -1) {
-                    suffix = file_name.substring(lastIndexOf);
-                    file_name = file_name.substring(0, lastIndexOf);
+                // 文件id
+                let fid;
+                // 后缀名
+                let suffix;
+                if (file_type === "0") {
+                    // 文件夹
+                    fid = $item.attr("cate_id");
+                } else {
+                    // 文件
+                    fid = $item.attr("file_id");
+                    // 处理后缀
+                    let lastIndexOf = file_name.lastIndexOf('.');
+                    if (lastIndexOf !== -1) {
+                        suffix = file_name.substring(lastIndexOf, file_name.length);
+                        file_name = file_name.substring(0, lastIndexOf);
+                    }
                 }
-            }
-
-            if (!fid || !file_name) return;
-
-            let VideoCode;
-            if (site === "mgstage") {
-                VideoCode = getVideoCode(file_name, "mgstage");
-            } else if (site === "fc2") {
-                VideoCode = getVideoCode(file_name, "fc2");
-            } else {
-                VideoCode = getVideoCode(file_name);
-            }
-
-            if (!VideoCode.fh) return;
-
-            if (rntype === "video") {
-                let ifChineseCaptions = checkifChineseCaptions(VideoCode.fh, file_name);
-                call(fid, rntype, VideoCode.fh, suffix, VideoCode.if4k, ifChineseCaptions, VideoCode.part, ifAddDate);
-            } else if (rntype === "picture") {
-                let picCaptions = getPicCaptions(VideoCode.fh, file_name);
-                call(fid, rntype, VideoCode.fh, suffix, VideoCode.if4k, undefined, picCaptions, ifAddDate);
-            }
-        });
+                if (fid && file_name) {
+                    let VideoCode;
+					// 正则匹配番号
+                    if (site == "mgstage"){
+                        VideoCode = getVideoCode(file_name,"mgstage");
+                    }else if (site == "fc2"){
+                        VideoCode = getVideoCode(file_name,"fc2");
+                    }else{
+                        // 兜底：即使不是 fc2 按钮，也尝试识别 FC2 番号，避免被通用规则误判成 PPV-xxxxx
+                        if (/^\s*FC2(?:[-_ ]?PPV)?/i.test(file_name)) {
+                            VideoCode = getVideoCode(file_name,"fc2");
+                        } else {
+                            VideoCode = getVideoCode(file_name);
+                        }
+                    }
+                    if (false) {
+                        VideoCode = getVideoCode(file_name);
+                    }
+                    console.log("正则匹配番号:" + VideoCode.fh);
+                    if (VideoCode.fh) {
+						if ( rntype=="video" ){
+							// 校验是否是中文字幕
+							let ifChineseCaptions = checkifChineseCaptions(VideoCode.fh, file_name);
+							// 执行查询
+							console.log("开始查询");
+							call(fid, rntype, VideoCode.fh, suffix, VideoCode.if4k, ifChineseCaptions, VideoCode.part, ifAddDate);
+						} else if ( rntype=="picture" ){
+							// 是图片时，向part传图片名冗余，不要中字判断，只在页面获取编号
+							// 图片名冗余
+							let picCaptions = getPicCaptions(VideoCode.fh, file_name);
+							let ifChineseCaptions;
+							// 执行查询
+							console.log("开始查询");
+							call(fid, rntype, VideoCode.fh, suffix, VideoCode.if4k, ifChineseCaptions, picCaptions, ifAddDate);
+						}
+                        
+                    }
+                }
+            });
 		// if(!Main.ReInstance({type:'', star:'', is_q: '', is_share:''})){window.location.reload();}
 		// if(list){window.location.reload();}
     }
@@ -273,7 +187,12 @@
         let date;
         let moviePage;
         let actors = [];
-        let url_s = searchUrl + fh;
+        // JavDB 查询时：FC2 如果带 -C（中文字幕标记），需要去掉再查
+        let fh_query = fh;
+        if (/^FC2-PPV-\d{5,8}-C$/i.test(fh_query)) {
+            fh_query = fh_query.replace(/-C$/i, "");
+        }
+        let url_s = searchUrl + fh_query;
         let getAvmooSearch = new Promise((resolve, reject) => {
             console.log("处理搜索页 " + url_s);
             GM_xmlhttpRequest({
@@ -297,7 +216,7 @@
                                 }
                                 // 也检查带连字符和不带连字符的情况
                                 let normalizedBoxFh = boxFh.toUpperCase().replace(/-/g, '');
-                                let normalizedFh = fh.toUpperCase().replace(/-/g, '');
+                                let normalizedFh = fh_query.toUpperCase().replace(/-/g, '');
                                 if (normalizedBoxFh === normalizedFh) {
                                     matchedBox = box;
                                     return false;
@@ -489,9 +408,14 @@
         let date;
         let moviePage;
         let actors = [];
-        let url_s = searchUrl + fh;
+        // JavDB 查询时：FC2 如果带 -C（中文字幕标记），需要去掉再查
+        let fh_query = fh;
+        if (/^FC2-PPV-\d{5,8}-C$/i.test(fh_query)) {
+            fh_query = fh_query.replace(/-C$/i, "");
+        }
+        let url_s = searchUrl + fh_query;
         let getJavbusSearch = new Promise((resolve, reject) => {
-            console.log("处理搜索页：" + url_s);
+            console.log("处理搜索页：" + url_s + " (fh=" + fh + ", fh_query=" + fh_query + ")");
             GM_xmlhttpRequest({
                 method: "GET",
                 url: url_s,
@@ -617,6 +541,20 @@
      * @param ifAddDate              是否添加时间 
      */
     function renameJavdb(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate) {
+        // 让 javdb 也支持 FC2：把 FC2PPV/数字 统一规范成 JavDB 认可的 FC2-PPV-xxxxxx
+        // 同时保留 -C（中文字幕）用于最终文件名（requestJavdb 内部查询会自动去掉 -C）
+        if (/^\d{5,8}$/i.test(fh)) {
+            // 来自旧 fc2 分支：只提取了数字
+            fh = "FC2-PPV-" + fh;
+        } else if (/^FC2PPV[-_ ]?\d{5,8}/i.test(fh)) {
+            fh = fh.replace(/^FC2PPV[-_ ]?(\d{5,8})(?:[-_ ]?(C))?$/i, function(_, n, c){
+                return "FC2-PPV-" + n + (c ? "-" + c.toUpperCase() : "");
+            });
+        } else if (/^FC2[-_ ]?PPV[-_ ]?\d{5,8}/i.test(fh)) {
+            fh = fh.replace(/^FC2[-_ ]?PPV[-_ ]?(\d{5,8})(?:[-_ ]?(C))?$/i, function(_, n, c){
+                return "FC2-PPV-" + n + (c ? "-" + c.toUpperCase() : "");
+            });
+        }
         requestJavdb(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, javdbSearch);
     }
     function requestJavdb(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, searchUrl) {
@@ -625,7 +563,12 @@
         let date;
         let moviePage;
         let actors = [];
-        let url_s = searchUrl + fh;
+        // JavDB 查询时：FC2 如果带 -C（中文字幕标记），需要去掉再查
+        let fh_query = fh;
+        if (/^FC2-PPV-\d{5,8}-C$/i.test(fh_query)) {
+            fh_query = fh_query.replace(/-C$/i, "");
+        }
+        let url_s = searchUrl + fh_query;
         let getJavdbSearch = new Promise((resolve, reject) => {
             console.log("处理搜索页：" + url_s);
             GM_xmlhttpRequest({
@@ -643,13 +586,48 @@
                         let itemFh = item.find(".video-title strong").text().trim();
                         if (itemFh) {
                             // 完全匹配（忽略大小写）
-                            if (itemFh.toUpperCase() === fh.toUpperCase()) {
+                            // JavDB 的 FC2 可能显示成：FC2-3281892（没有 PPV）
+                            let a = itemFh.toUpperCase();
+                            let b = fh_query.toUpperCase();
+                            let aNorm = a.replace(/-/g, "").replace(/^FC2PPV/, "FC2");
+                            let bNorm = b.replace(/-/g, "").replace(/^FC2PPV/, "FC2");
+                            // 把 FC2-PPV-3281892 归一成 FC23281892（去掉 PPV）
+                            bNorm = bNorm.replace(/^FC2PPV/, "FC2").replace(/^FC2PPV/, "FC2");
+                            bNorm = bNorm.replace(/^FC2PPV/, "FC2");
+                            bNorm = bNorm.replace(/^FC2PPV/, "FC2");
+                            bNorm = bNorm.replace(/^FC2PPV/, "FC2");
+                            // 更通用：直接把 FC2PPV/FC2-PPV 的 PPV 删除
+                            bNorm = bNorm.replace(/^FC2PPV/, "FC2");
+                            bNorm = bNorm.replace(/^FC2PPV/, "FC2");
+                            // 关键：把 FC2PPV 变 FC2（等价于 JavDB 的 FC2-数字）
+                            bNorm = bNorm.replace(/^FC2PPV/, "FC2");
+                            if (a === b || aNorm === bNorm || aNorm === bNorm.replace(/^FC2PPV/, "FC2")) {
                                 matchedItem = item;
                                 return false; // 找到匹配的，退出循环
                             }
-                            // 也检查带连字符和不带连字符的情况
-                            let normalizedItemFh = itemFh.toUpperCase().replace(/-/g, '');
-                            let normalizedFh = fh.toUpperCase().replace(/-/g, '');
+                            // 也检查带连字符和不带连字符的情况（并兼容 FC2-PPV vs FC2）
+                            let normalizedItemFh = itemFh.toUpperCase().replace(/-/g, '').replace(/^FC2PPV/, 'FC2');
+                            let normalizedFh = fh_query.toUpperCase().replace(/-/g, '').replace(/^FC2PPV/, 'FC2');
+                            // 把 FC2PPV/FC2-PPV 的 PPV 去掉（JavDB 有时显示成 FC2-3281892）
+                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2').replace(/^FC2PPV/, 'FC2');
+                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2');
+                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2');
+                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2');
+                            // 更直接：把 FC2PPV 统一成 FC2，且移除 PPV
+                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2').replace(/^FC2PPV/, 'FC2');
+                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2');
+                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2');
+                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2');
+                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2');
+                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2');
+                            // 最终把 FC2PPV 变 FC2（去掉 PPV 语义）
+                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2');
+                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2');
+                            // 同时把 FC2PPV/FC2PPV 归一后，去掉可能残留的 PPV
+                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2').replace(/^FC2PPV/, 'FC2');
+                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2');
+                            // 简单粗暴：把前缀里的 PPV 去掉
+                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2');
                             if (normalizedItemFh === normalizedFh) {
                                 matchedItem = item;
                                 return false;
@@ -1196,11 +1174,7 @@
      */
     function getVideoCode(title, type="nomal") {
         title = title.toUpperCase();
-        // FC2：先剥离结尾分段（-1 / _1），避免影响 javdb 匹配
-        if (type === "fc2") {
-            title = title.replace(/([\-_])(\d+)$/, "");
-        }
-        console.log("传入title: " + title);
+            console.log("传入title: " + title + " type:" + type);
         // 判断是否多集
         let part;  //FHD1 hhb1
         if (!part) {
@@ -1239,6 +1213,7 @@
             .replace("BIG2048.COM","")
             .replace("FUN2048.COM@","")
 			.replace("HHD800.COM@","")
+            .replace("489155.com@","")
             .replace(".HHB","分段")
             .replace(".FHD","分段")
             .replace(".HD","分段");
@@ -1253,12 +1228,20 @@
 			}	
 		}else if (type=="fc2"){
 			console.log("分析fc2编号");
-			t = title.match(/(FC2){0,1}[\-_ ]{0,1}(PPV){0,1}[\-_ ]{0,1}(\d{5,8})/);
-			if(t){
-				console.log("找到番号:" + t[0]);
-				console.log("查找番号:" + t[3]);
-				t = t[3];
+			// 支持：FC2PPV-3281892-C / FC2-PPV-3281892 / FC2 PPV 3281892 等
+			// 规则：
+			// 1) 查询用番号必须是 FC2-PPV-xxxxxx（JavDB 认可）
+			// 2) -C 仅作为“中文字幕”语义后缀保留到最终文件名里，不能参与搜索匹配
+			let m = title.match(/(?:^|[^A-Z0-9])(FC2)[\-_ ]{0,2}(PPV)[\-_ ]{0,2}(\d{5,8})(?:[\-_ ]{0,2}(C))?(?=$|[^A-Z0-9])/);
+			if (m) {
+				let num = m[3];
+				let cFlag = m[4];
+				t = "FC2-PPV-" + num;
+				if (cFlag) t += "-" + cFlag;
+				console.log("找到番号:" + t);
+				// FC2 已命中就别再掉进后面的通用规则里乱匹配
 			}
+
 		}else {
 			t = title.match(/T28[\-_]\d{3,4}/);
 			// 一本道
