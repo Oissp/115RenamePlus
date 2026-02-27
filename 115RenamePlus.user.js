@@ -696,11 +696,15 @@
                                     });
                                 }
 
-                                // 兜底：有些页面结构不同，直接全页抓演员链接
+                                // 兜底：有些页面结构不同，尝试仅从 /actors/ 链接抓取（避免把“有碼,無碼,歐美”等分类抓进来）
                                 if (!actors.length) {
-                                    response.find("a[href*=\"/actors/\"], a[href*=\"/actor/\"]").each(function(){
+                                    response.find("a[href*=\"/actors/\"]").each(function(){
                                         let a = $(this).text().trim();
-                                        if (a && actors.indexOf(a) === -1) actors.push(a);
+                                        if (!a) return;
+                                        // 过滤明显不是演员名的文本
+                                        if (a.indexOf(",") !== -1) return;
+                                        if (a === "有碼" || a === "無碼" || a === "歐美" || a === "動畫" || a === "寫真" || a === "字幕" || a === "中字") return;
+                                        if (actors.indexOf(a) === -1) actors.push(a);
                                     });
                                 }
 
