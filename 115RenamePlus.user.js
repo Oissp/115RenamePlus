@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
-// @namespace           https://github.com/LSD08KM/115RenamePlus
-// @version             0.8.10 格式化视频分段 4K 增加icon
+// @namespace           https://github.com/Oissp/115RenamePlus/
+// @version             0.8.21
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
