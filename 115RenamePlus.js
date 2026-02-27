@@ -133,8 +133,8 @@
                     }else if (site == "fc2"){
                         VideoCode = getVideoCode(file_name,"fc2");
                     }else{
-                        // 兜底：即使不是 fc2 按钮，也尝试识别 FC2 番号，避免被通用规则误判成 PPV-xxxxx
-                        if (/^\s*FC2(?:[-_ ]?PPV)?/i.test(file_name)) {
+                        // 兜底：即使不是 fc2 按钮，也尝试识别 FC2 番号（文件名前面可能有域名前缀，如 HHD800.COM@FC2-PPV-xxxxxx）
+                        if (/FC2(?:[-_ ]?PPV)?/i.test(file_name)) {
                             VideoCode = getVideoCode(file_name,"fc2");
                         } else {
                             VideoCode = getVideoCode(file_name);
