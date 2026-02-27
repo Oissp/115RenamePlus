@@ -621,6 +621,16 @@
                             matchedItem = item;
                             return false;
                         }
+
+                        // FC2 兜底：只比对数字部分（JavDB 可能展示成 FC2-xxxxxxx / FC2PPVxxxxxxx / FC2-PPV-xxxxxxx）
+                        if (b.indexOf("FC2") === 0) {
+                            let aNum = a.match(/FC2[^0-9]*(\d{5,8})/i);
+                            let bNum = b.match(/FC2[^0-9]*(\d{5,8})/i);
+                            if (aNum && bNum && aNum[1] === bNum[1]) {
+                                matchedItem = item;
+                                return false;
+                            }
+                        }
                     });
                     
                     if (matchedItem) {
