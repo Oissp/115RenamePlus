@@ -1377,10 +1377,21 @@
             return false;
         }
         if (t) {
-            t = t.toString().replace("_", "-");
-            console.log("找到番号:" + t);
+            let tStr = t.toString();
+            // 检查番号末尾是否有单个字母分段（如 STAR-590A -> STAR-590 + A）
+            let letterPartMatch = tStr.match(/^(.+?)([A-Z])$/);
+            if (letterPartMatch && !part) {
+                // 确保是 字母前是数字的情况（如 590A），避免误判
+                if (/[0-9][A-Z]$/.test(tStr)) {
+                    tStr = letterPartMatch[1];
+                    part = letterPartMatch[2];
+                    console.log("从番号末尾分离分段：" + part);
+                }
+            }
+            tStr = tStr.replace("_", "-");
+            console.log("找到番号:" + tStr);
             return{
-                fh: t,
+                fh: tStr,
                 part: part,
 				if4k: if4k,
                 // FC2-C 字幕标记：如果之前移除了 -C，这里告诉调用者这是中文字幕版本
