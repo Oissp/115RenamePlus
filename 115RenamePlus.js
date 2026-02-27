@@ -147,12 +147,13 @@
                     if (VideoCode.fh) {
 						if ( rntype=="video" ){
 							// 校验是否是中文字幕
-							let ifChineseCaptions = checkifChineseCaptions(VideoCode.fh, file_name);
+							// 优先使用 FC2-C 标记，如果没有则用常规检查
+							let ifChineseCaptions = VideoCode.fc2C ? true : checkifChineseCaptions(VideoCode.fh, file_name);
 							// 执行查询
 							console.log("开始查询");
 							call(fid, rntype, VideoCode.fh, suffix, VideoCode.if4k, ifChineseCaptions, VideoCode.part, ifAddDate);
 						} else if ( rntype=="picture" ){
-							// 是图片时，向part传图片名冗余，不要中字判断，只在页面获取编号
+							// 是图片时，向 part 传图片名冗余，不要中字判断，只在页面获取编号
 							// 图片名冗余
 							let picCaptions = getPicCaptions(VideoCode.fh, file_name);
 							let ifChineseCaptions;
@@ -160,7 +161,7 @@
 							console.log("开始查询");
 							call(fid, rntype, VideoCode.fh, suffix, VideoCode.if4k, ifChineseCaptions, picCaptions, ifAddDate);
 						}
-                        
+
                     }
                 }
             });
@@ -1110,8 +1111,8 @@
 						}
 					}
 				}
-				let newName = String(fh);
-				// 是4k 
+                let newName = String(fh);
+				// 是 4k
 				if (if4k) {
 					newName = newName + if4k;
 				}
@@ -1119,8 +1120,9 @@
 				if (ifChineseCaptions) {
 					newName = newName + "-C";
 				}
+				// 有分段：统一格式为 番号_字母/数字
 				if (part){
-					newName = newName + "_P" +  part;
+					newName = newName + "_" + part;
 				}
 				// 有演员
 				if (actor) {
@@ -1142,11 +1144,11 @@
 				}
 				return newName;
 			}
-		} else if ( rntype=="picture" ){
+        } else if ( rntype=="picture" ){
 			if (fh){
 				let newName = String(fh);
 				if (part){
-				    newName = newName  +  part;
+				    newName = newName + "_" + part;
 				}
 				if (suffix) {
 				    // 文件保存后缀名
@@ -1221,9 +1223,42 @@
      */
     function getVideoCode(title, type="nomal") {
         title = title.toUpperCase();
-            console.log("传入title: " + title + " type:" + type);
-        // 判断是否多集
-        let part;  //FHD1 hhb1
+            console.log("传入 title: " + title + " type:" + type);
+
+        // 先清理引流站前缀（在识别分段之前清理，避免影响）
+        title = title
+            .replace("SIS001", "")
+            .replace("1080P", "")
+            .replace("720P", "")
+            .replace("[JAV] [UNCENSORED]","")
+            .replace("[THZU.CC]","")
+            .replace("[22SHT.ME]","")
+            .replace("[7SHT.ME]","")
+            .replace("BIG2048.COM","")
+            .replace("FUN2048.COM@","")
+            .replace("HHD800.COM@","")
+            .replace("489155.COM@","");
+
+        // 判断是否多集/分段：支持多种格式
+        let part;
+        
+        // 特殊处理 FC2 的 -C（中文字幕标记），不要把它当成 part
+        let fc2CFlag = false;
+        if (/FC2[-_ ]?PPV[-_ ]?\d{5,8}[-_ ]C$/i.test(title)) {
+            fc2CFlag = true;
+            title = title.replace(/[-_ ]C$/i, "");
+            console.log("识别 FC2-C 字幕标记，暂移除");
+        }
+        
+        // 优先识别尾部 -数字/_数字/-字母/_字母 分段（如 -3, _2, -A, _B, STAR-590A）
+        let partMatch = title.match(/[-_](\d+|[A-Z])$/);
+        if (partMatch) {
+            part = partMatch[1];
+            // 从 title 中去掉分段后缀，避免干扰番号识别
+            title = title.replace(/[-_](\d+|[A-Z])$/, "");
+            console.log("识别尾部分段：" + part);
+        }
+        // 传统格式：CD1, HD2, FHD3, HHB4 等
         if (!part) {
             part = title.match(/CD\d{1,2}/);
         }if (!part) {
@@ -1235,36 +1270,22 @@
         }
         if (part){
             part = part.toString().match(/\d+/).toString();
-            console.log("识别多集:" + part);
+            console.log("识别多集：" + part);
         }
-		
+
 		let if4k;
 		if (!if4k) {
 			if4k = title.match(/(-4K){1}/);
 			if(if4k){ if4k = "-4k";}
 		} if (!if4k) {
-		    if4k = title.match(/(VP9版){1}/);
-			if(if4k){ if4k = "-4kVP9版";}
+		    if4k = title.match(/(VP9 版){1}/);
+			if(if4k){ if4k = "-4kVP9 版";}
 		} if (!if4k) {
-			if4k = title.match(/(H264版){1}/);
-			if(if4k){ if4k = "-4kH264版";}
+			if4k = title.match(/(H264 版){1}/);
+			if(if4k){ if4k = "-4kH264 版";}
 		}
 
-        title = title.replace("SIS001", "")
-            .replace("1080P", "")
-            .replace("720P", "")
-            .replace("[JAV] [UNCENSORED]","")
-            .replace("[THZU.CC]","")
-            .replace("[22SHT.ME]","")
-            .replace("[7SHT.ME]","")
-            .replace("BIG2048.COM","")
-            .replace("FUN2048.COM@","")
-			.replace("HHD800.COM@","")
-            .replace("489155.com@","")
-            .replace(".HHB","分段")
-            .replace(".FHD","分段")
-            .replace(".HD","分段");
-        console.log("修正后的title: " + title);
+        console.log("修正后的 title: " + title);
 		
 		let t = '';
 		if (type=="mgstage"){
@@ -1362,6 +1383,8 @@
                 fh: t,
                 part: part,
 				if4k: if4k,
+                // FC2-C 字幕标记：如果之前移除了 -C，这里告诉调用者这是中文字幕版本
+                fc2C: fc2CFlag || undefined,
             };
         }
     }
