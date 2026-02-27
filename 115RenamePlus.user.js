@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
-// @namespace           https://github.com/Oissp/115RenamePlus
-// @version             0.8.20
+// @namespace           https://github.com/LSD08KM/115RenamePlus
+// @version             0.8.10 格式化视频分段 4K 增加icon
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -1063,6 +1063,15 @@
     function buildNewName(fh, rntype, suffix, if4k, ifChineseCaptions, part, title, date, actor, ifAddDate) {
 		if ( rntype=="video" ){
 			if (title) {
+				// javbus 的 <h3> 可能是：番号 + 标题 + 演员名；而我们会另外拼接 actor，避免重复
+				if (actor && title) {
+					let actorList = String(actor).split(",").map(s => (s || "").trim()).filter(Boolean);
+					for (let a of actorList) {
+						if (title.endsWith(" " + a)) {
+							title = title.slice(0, title.length - (a.length + 1)).trim();
+						}
+					}
+				}
 				let newName = String(fh);
 				// 是4k 
 				if (if4k) {
