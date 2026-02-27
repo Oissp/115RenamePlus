@@ -284,9 +284,9 @@
             return new Promise((resolve, reject) => {
                 if(moviePage){
                     let actor = actors.toString();
-                    console.log(actor);
-                    // 构建新名称
-                    let newName = buildNewName(fh_o, rntype, suffix, if4k, ifChineseCaptions, part, title, date, actor, ifAddDate);                    
+                    console.log(actor);                // 构建新名称
+                console.log("[javdb] pre-build fh_o="+fh_o+" title="+title+" actor="+actor+" actors="+actors);
+                let newName = buildNewName(fh_o, rntype, suffix, if4k, ifChineseCaptions, part, title, date, actor, ifAddDate);                    
                     if (newName) {
                         // 修改名称
                         send_115(fid, newName, fh_o);
@@ -687,11 +687,20 @@
                                     let dateText = labels["日期"].find(".value").text().trim();
                                     date = dateText.match(/\d{4}-\d{2}-\d{2}/);
                                 }
-                                
-                                // 演员们
-                                if (labels["演員"]) {
-                                    labels["演員"].find(".value a").each(function(){
-                                        actors.push($(this).text().trim());
+                                // 演员们（JavDB 字段名可能是：演員/演员/出演/出演者/Cast）
+                                let actorBlock = labels["演員"] || labels["演员"] || labels["出演"] || labels["出演者"] || labels["Cast"];
+                                if (actorBlock) {
+                                    actorBlock.find(".value a").each(function(){
+                                        let a = $(this).text().trim();
+                                        if (a) actors.push(a);
+                                    });
+                                }
+
+                                // 兜底：有些页面结构不同，直接全页抓演员链接
+                                if (!actors.length) {
+                                    response.find("a[href*=\"/actors/\"], a[href*=\"/actor/\"]").each(function(){
+                                        let a = $(this).text().trim();
+                                        if (a && actors.indexOf(a) === -1) actors.push(a);
                                     });
                                 }
 
@@ -719,8 +728,7 @@
                     let actor = actors.toString();
                     console.log(actor);
                     // 构建新名称
-                    let newName = buildNewName(fh_o, rntype, suffix, if4k, ifChineseCaptions, part, title, date, actor, ifAddDate);                    
-                    if (newName) {
+                    let newName = buildNewName(fh_o, rntype, suffix, if4k, ifChineseCaptions, part, title, date, actor, ifAddDate);                    if (newName) {
                         // 修改名称
                         send_115(fid, newName, fh_o);
                         console.log("新名: "+newName);
