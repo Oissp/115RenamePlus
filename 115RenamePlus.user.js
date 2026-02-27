@@ -1048,6 +1048,11 @@
      * @param title 标题
      */
     function checkifChineseCaptions(fh, title) {
+        // 清理引流站前缀，避免 ".com" 里的 c 被误判为字幕
+        // 例如：489155.com@WAAA-622
+        if (title && title.indexOf(".com@") !== -1) {
+            title = title.replace(/\b\d+\.com@/ig, "");
+        }
         if (title.indexOf("中文字幕") !== -1) {
             return true;
         }
