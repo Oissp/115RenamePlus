@@ -694,6 +694,15 @@
                                         actors.push($(this).text().trim());
                                     });
                                 }
+
+                                // JavDB 有些情况下标题末尾会带演员名（或原文件名残留），这里用演员列表把 title 末尾的演员名剔除，保证最终格式统一
+                                if (title && actors.length) {
+                                    for (let a of actors) {
+                                        if (a && title.endsWith(" " + a)) {
+                                            title = title.slice(0, title.length - (a.length + 1)).trim();
+                                        }
+                                    }
+                                }
                                 console.log('演员 '+actors);
                                 resolve();
                             }
