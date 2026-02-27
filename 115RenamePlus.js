@@ -503,7 +503,15 @@
         function setName(){
             return new Promise((resolve, reject) => {
                 if(moviePage){
-                    let actor = actors.toString();
+                    // 清洗演员：去重、去掉分类标签、把逗号拼接的杂项拆开过滤
+                    let actor = actors
+                        .join(",")
+                        .split(",")
+                        .map(s => (s || "").trim())
+                        .filter(Boolean)
+                        .filter(s => !(s === "有碼" || s === "無碼" || s === "歐美" || s === "動畫" || s === "寫真" || s === "字幕" || s === "中字"))
+                        .filter((s, i, arr) => arr.indexOf(s) === i)
+                        .join(",");
                     console.log(actor);
                     // 构建新名称
                     let newName = buildNewName(fh_o, rntype, suffix, if4k, ifChineseCaptions, part, title, date, actor, ifAddDate);                    
@@ -691,8 +699,12 @@
                                 let actorBlock = labels["演員"] || labels["演员"] || labels["出演"] || labels["出演者"] || labels["Cast"];
                                 if (actorBlock) {
                                     actorBlock.find(".value a").each(function(){
+                                        let href = $(this).attr("href") || "";
                                         let a = $(this).text().trim();
-                                        if (a) actors.push(a);
+                                        if (!a) return;
+                                        // 只接受演员链接，避免把分类/标签混进来
+                                        if (href.indexOf("/actors/") === -1) return;
+                                        if (actors.indexOf(a) === -1) actors.push(a);
                                     });
                                 }
 
