@@ -590,57 +590,36 @@
                     let movieItems = response.find(".movie-list .item");
                     let matchedItem = null;
                     
+                    // 统一番号归一化：用于在搜索结果里做稳健匹配（特别是 FC2-PPV vs FC2）
+                    function normCode(s) {
+                        if (!s) return "";
+                        let x = String(s).toUpperCase();
+                        // 去掉分隔符
+                        x = x.replace(/[\s\-_]/g, "");
+                        // FC2：JavDB 有时显示成 FC2-数字（不含 PPV），所以统一移除 PPV
+                        if (x.startsWith("FC2")) {
+                            x = x.replace(/PPV/g, "");
+                        }
+                        return x;
+                    }
+
                     movieItems.each(function() {
                         let item = $(this);
                         let itemFh = item.find(".video-title strong").text().trim();
-                        if (itemFh) {
-                            // 完全匹配（忽略大小写）
-                            // JavDB 的 FC2 可能显示成：FC2-3281892（没有 PPV）
-                            let a = itemFh.toUpperCase();
-                            let b = fh_query.toUpperCase();
-                            let aNorm = a.replace(/-/g, "").replace(/^FC2PPV/, "FC2");
-                            let bNorm = b.replace(/-/g, "").replace(/^FC2PPV/, "FC2");
-                            // 把 FC2-PPV-3281892 归一成 FC23281892（去掉 PPV）
-                            bNorm = bNorm.replace(/^FC2PPV/, "FC2").replace(/^FC2PPV/, "FC2");
-                            bNorm = bNorm.replace(/^FC2PPV/, "FC2");
-                            bNorm = bNorm.replace(/^FC2PPV/, "FC2");
-                            bNorm = bNorm.replace(/^FC2PPV/, "FC2");
-                            // 更通用：直接把 FC2PPV/FC2-PPV 的 PPV 删除
-                            bNorm = bNorm.replace(/^FC2PPV/, "FC2");
-                            bNorm = bNorm.replace(/^FC2PPV/, "FC2");
-                            // 关键：把 FC2PPV 变 FC2（等价于 JavDB 的 FC2-数字）
-                            bNorm = bNorm.replace(/^FC2PPV/, "FC2");
-                            if (a === b || aNorm === bNorm || aNorm === bNorm.replace(/^FC2PPV/, "FC2")) {
-                                matchedItem = item;
-                                return false; // 找到匹配的，退出循环
-                            }
-                            // 也检查带连字符和不带连字符的情况（并兼容 FC2-PPV vs FC2）
-                            let normalizedItemFh = itemFh.toUpperCase().replace(/-/g, '').replace(/^FC2PPV/, 'FC2');
-                            let normalizedFh = fh_query.toUpperCase().replace(/-/g, '').replace(/^FC2PPV/, 'FC2');
-                            // 把 FC2PPV/FC2-PPV 的 PPV 去掉（JavDB 有时显示成 FC2-3281892）
-                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2').replace(/^FC2PPV/, 'FC2');
-                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2');
-                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2');
-                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2');
-                            // 更直接：把 FC2PPV 统一成 FC2，且移除 PPV
-                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2').replace(/^FC2PPV/, 'FC2');
-                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2');
-                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2');
-                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2');
-                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2');
-                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2');
-                            // 最终把 FC2PPV 变 FC2（去掉 PPV 语义）
-                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2');
-                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2');
-                            // 同时把 FC2PPV/FC2PPV 归一后，去掉可能残留的 PPV
-                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2').replace(/^FC2PPV/, 'FC2');
-                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2');
-                            // 简单粗暴：把前缀里的 PPV 去掉
-                            normalizedFh = normalizedFh.replace(/^FC2PPV/, 'FC2');
-                            if (normalizedItemFh === normalizedFh) {
-                                matchedItem = item;
-                                return false;
-                            }
+                        if (!itemFh) return;
+
+                        let a = itemFh.toUpperCase();
+                        let b = fh_query.toUpperCase();
+
+                        if (a === b) {
+                            matchedItem = item;
+                            return false;
+                        }
+
+                        // 归一化比较：去分隔符 + 兼容 FC2-PPV vs FC2
+                        if (normCode(a) === normCode(b)) {
+                            matchedItem = item;
+                            return false;
                         }
                     });
                     
@@ -1250,15 +1229,7 @@
             console.log("识别 FC2-C 字幕标记，暂移除");
         }
         
-        // 优先识别尾部 -数字/_数字/-字母/_字母 分段（如 -3, _2, -A, _B, STAR-590A）
-        let partMatch = title.match(/[-_](\d+|[A-Z])$/);
-        if (partMatch) {
-            part = partMatch[1];
-            // 从 title 中去掉分段后缀，避免干扰番号识别
-            title = title.replace(/[-_](\d+|[A-Z])$/, "");
-            console.log("识别尾部分段：" + part);
-        }
-        // 传统格式：CD1, HD2, FHD3, HHB4 等
+        // 传统格式：CD1, HD2, FHD3, HHB4 等（只在文件名中找，不要从整段 title 末尾取，避免误把日期 03-19 当分段）
         if (!part) {
             part = title.match(/CD\d{1,2}/);
         }if (!part) {
@@ -1378,17 +1349,30 @@
         }
         if (t) {
             let tStr = t.toString();
-            // 检查番号末尾是否有单个字母分段（如 STAR-590A -> STAR-590 + A）
-            let letterPartMatch = tStr.match(/^(.+?)([A-Z])$/);
-            if (letterPartMatch && !part) {
-                // 确保是 字母前是数字的情况（如 590A），避免误判
-                if (/[0-9][A-Z]$/.test(tStr)) {
-                    tStr = letterPartMatch[1];
-                    part = letterPartMatch[2];
-                    console.log("从番号末尾分离分段：" + part);
+            
+            // 先把番号里的 _ 统一成 -，避免后面处理分段时漏判
+            tStr = tStr.replace(/_/g, "-");
+
+            // 从“番号本身”里识别并剥离尾部分段（避免误把日期 2015-03-19 的 -19 当分段）
+            // 1) 数字分段：FC2-PPV-4679178-3 / FC2-PPV-4679178_4
+            // 2) 字母分段：STAR-590A
+            if (!part) {
+                let mNum = tStr.match(/^(.*?)-(\d{1,2})$/);
+                if (mNum) {
+                    tStr = mNum[1];
+                    part = mNum[2];
+                    console.log("从番号末尾分离数字分段：" + part);
                 }
             }
-            tStr = tStr.replace("_", "-");
+            if (!part) {
+                let mLetter = tStr.match(/^(.+?)([A-Z])$/);
+                if (mLetter && /[0-9][A-Z]$/.test(tStr)) {
+                    tStr = mLetter[1];
+                    part = mLetter[2];
+                    console.log("从番号末尾分离字母分段：" + part);
+                }
+            }
+
             console.log("找到番号:" + tStr);
             return{
                 fh: tStr,
