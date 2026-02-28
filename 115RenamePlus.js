@@ -689,12 +689,17 @@
                                 let actorBlock = labels["演員"] || labels["演员"] || labels["出演"] || labels["出演者"] || labels["Cast"];
                                 if (actorBlock) {
                                     actorBlock.find(".value a").each(function(){
-                                        let href = $(this).attr("href") || "";
-                                        let a = $(this).text().trim();
+                                        let $a = $(this);
+                                        let href = $a.attr("href") || "";
+                                        let a = $a.text().trim();
                                         if (!a) return;
                                         // 只接受演员链接，避免把分类/标签混进来
                                         if (href.indexOf("/actors/") === -1) return;
-                                        if (actors.indexOf(a) === -1) actors.push(a);
+                                        // 只抓女演员：检查后面是否有 symbol female 标记
+                                        let nextStrong = $a.next("strong.symbol");
+                                        if (nextStrong.length && nextStrong.hasClass("female")) {
+                                            if (actors.indexOf(a) === -1) actors.push(a);
+                                        }
                                     });
                                 }
 
