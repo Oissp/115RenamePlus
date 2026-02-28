@@ -703,17 +703,29 @@
                                     });
                                 }
 
-                                // 兜底：有些页面结构不同，尝试仅从 /actors/ 链接抓取（避免把“有碼,無碼,歐美”等分类抓进来）
+
+                                // 兜底：有些页面结构不同，尝试仅从 /actors/ 链接抓取（避免把"有碼，無碼，歐美"等分类抓进来）
+                                // 兜底也过滤性别：只抓女演员
                                 if (!actors.length) {
+                                    console.log("[javdb] 进入兜底抓演员");
                                     response.find("a[href*=\"/actors/\"]").each(function(){
-                                        let a = $(this).text().trim();
+                                        let $a = $(this);
+                                        let a = $a.text().trim();
                                         if (!a) return;
                                         // 过滤明显不是演员名的文本
                                         if (a.indexOf(",") !== -1) return;
                                         if (a === "有碼" || a === "無碼" || a === "歐美" || a === "動畫" || a === "寫真" || a === "字幕" || a === "中字") return;
+                                        // 检查后面是否有 symbol female 标记
+                                        let nextStrong = $a.next("strong.symbol");
+                                        if (!(nextStrong.length && nextStrong.hasClass("female"))) {
+                                            console.log("[javdb] 兜底过滤男演员:", a);
+                                            return;
+                                        }
                                         if (actors.indexOf(a) === -1) actors.push(a);
                                     });
                                 }
+
+                                console.log('[javdb] 最终演员列表:', actors);
 
                                 // JavDB 有些情况下标题末尾会带演员名（或原文件名残留），这里用演员列表把 title 末尾的演员名剔除，保证最终格式统一
                                 if (title && actors.length) {
