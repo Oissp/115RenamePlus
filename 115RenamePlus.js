@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.8.26
+// @version             0.8.27
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -939,10 +939,10 @@
                             .find("div.items_article_headerInfo > ul > li a:last ")
                             .html();
                 // 上架时间 上架时间：2020/06/17
-                let date = response
+                let dateText = response
                             .find("div.items_article_Releasedate p")
                             .html();
-                date = date.replace(/\s+/g,"").replace(/:/g, "").replace(/\//g, "-");
+                let date = dateText ? dateText.replace(/\s+/g,"").replace(/:/g, "").replace(/\//g, "-") : "";
 				if ( rntype=="picture" ){
 					if ( fh && title ) {
 						title="";
