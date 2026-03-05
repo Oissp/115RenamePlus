@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.8.25
+// @version             0.8.26
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -915,11 +915,19 @@
         requestFC2(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, Fc2Search);
     }
     function requestFC2(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, searchUrl) {
+        // 从 fh 中提取纯数字编号（如 FC2-PPV-745325-C -> 745325）
+        let fc2Num = fh.match(/FC2[-_ ]?PPV[-_ ]?(\d{5,8})/i);
+        if (!fc2Num) {
+            // 兜底：如果 fh 本身就是数字
+            fc2Num = [null, fh.replace(/[^0-9]/g, "")];
+        }
+        let fc2Id = fc2Num[1];
+        
         GM_xmlhttpRequest({
             method: "GET",
-            url: searchUrl + fh +"/",
+            url: searchUrl + fc2Id + "/",
             onload: xhr => {
-				console.log("处理影片页 " + searchUrl + fh +"/");
+				console.log("处理影片页 " + searchUrl + fc2Id + "/");
                 // 匹配标题
                 let response = $(xhr.responseText);
                 let title = response
@@ -930,7 +938,7 @@
                 let user = response
                             .find("div.items_article_headerInfo > ul > li a:last ")
                             .html();
-                // 上架时间 上架时间 : 2020/06/17
+                // 上架时间 上架时间：2020/06/17
                 let date = response
                             .find("div.items_article_Releasedate p")
                             .html();
@@ -942,17 +950,22 @@
 						date="";
 					}
 				}				
-                fh = "FC2-PPV-" + fh;
-				
+                // 构建标准番号格式
+                let standardFh = "FC2-PPV-" + fc2Id;
+                // 如果原 fh 里有 -C 标记，加回去
+                if (/-C$/i.test(fh)) {
+                    standardFh += "-C";
+                }
+                
                 if (title) {
                     // 构建新名称
-                    let newName = buildNewName(fh, rntype, suffix, if4k, ifChineseCaptions, part, title, date, user, ifAddDate);
+                    let newName = buildNewName(standardFh, rntype, suffix, if4k, ifChineseCaptions, part, title, date, user, ifAddDate);
                     if (newName) {
                         // 修改名称
-                        send_115(fid, newName, fh);
+                        send_115(fid, newName, standardFh);
                     }
                 } else if (searchUrl !== javbusUncensoredSearch) {
-                    GM_notification(getDetails(fh, "商品页可能已消失"));
+                    GM_notification(getDetails(standardFh, "商品页可能已消失"));
                     // 进行无码重查询
                     // requestJavbus(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, javbusUncensoredSearch);
                 }
