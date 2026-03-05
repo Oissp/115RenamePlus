@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.9.2
+// @version             0.9.3
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -153,16 +153,17 @@
 		// if(list){window.location.reload();}
     }
     /**
-     * 通过avmoo搜索+javbus详情页进行查询
-	 * @param fid               文件id
-	 * @param rntype      		改名类型 video picture
-	 * @param fh                番号
-	 * @param suffix            后缀
-	 * @param ifChineseCaptions   是否有中文字幕
-	 * @param part              视频分段，图片冗余文件名 
-	 * @param ifAddDate              是否添加时间 
-	 * @param searchUrl               请求地址
+     * 通过 javbus 详情页进行查询
+     * @param fid               文件 id
+     * @param rntype            改名类型 video picture
+     * @param fh                番号
+     * @param suffix            后缀
+     * @param ifChineseCaptions   是否有中文字幕
+     * @param part              视频分段，图片冗余文件名
+     * @param ifAddDate              是否添加时间
+     * @param searchUrl               请求地址
      */
+    function renameJavbusDetail(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate) {
         requestJavbusDetail(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, javbusSearch);
     }
     function requestJavbusDetail(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, searchUrl) {
