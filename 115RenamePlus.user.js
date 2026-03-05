@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.8.27
+// @version             0.8.28
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -933,11 +933,25 @@
                 let title = response
                     .find("div.items_article_MainitemThumb img")
                     .attr("title");
+                // 如果 title 是 HTML 或为空，尝试从其他位置获取
+                if (!title || title.indexOf("<") !== -1 || title.indexOf("svg") !== -1) {
+                    title = response.find("div.items_article_MainitemThumb img").attr("alt") || "";
+                }
+                if (!title) {
+                    title = response.find("div.items_article_title a").text().trim() || "";
+                }
+                // 清理 title 中的 HTML 标签和实体
+                if (title) {
+                    let tmp = document.createElement("div");
+                    tmp.innerHTML = title;
+                    title = tmp.textContent || tmp.innerText || "";
+                    title = title.trim();
+                }
 				console.log("获取到标题 " + title );
                 // 卖家
                 let user = response
                             .find("div.items_article_headerInfo > ul > li a:last ")
-                            .html();
+                            .text().trim();
                 // 上架时间 上架时间：2020/06/17
                 let dateText = response
                             .find("div.items_article_Releasedate p")
