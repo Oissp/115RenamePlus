@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.9.0
+// @version             0.9.1
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -21,18 +21,16 @@
      * @param suffix            后缀，就是扩展名
      */
 (function () {
+    'use strict';
+
     // 按钮
     let rename_list = `
             <li id="rename_list">
-                <a id="rename_video_javbus" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名javbus</span></a>
-                <a id="rename_video_javdb" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名javdb</span></a>
-                <a id="rename_video_FC2" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名FC2</span></a>
+                <a id="rename_video_javbus" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名 javbus</span></a>
+                <a id="rename_video_javdb" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名 javdb</span></a>
+                <a id="rename_video_FC2" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名 FC2</span></a>
             </li>
         `;
-    /**
-     * 添加按钮的定时任务
-     */
-    let interval = setInterval(buttonInterval, 1000);
 
     // javbus
     let javbusBase = "https://www.javbus.com/";
@@ -40,7 +38,7 @@
     let javbusSearch = javbusBase + "search/";
     // 无码
     let javbusUncensoredSearch = javbusBase + "uncensored/search/";
-	
+
     //FC2
     let Fc2Search = "https://adult.contents.fc2.com/article/";
 
@@ -48,11 +46,11 @@
     let javdbBase = "https://javdb.com";
     let javdbSearch = javdbBase + "/search?q=";
 
-    'use strict';
-
     /**
-     * 添加按钮定时任务(检测到可以添加时添加按钮)
+     * 添加按钮定时任务 (检测到可以添加时添加按钮)
      */
+    let interval = setInterval(buttonInterval, 1000);
+
     function buttonInterval() {
         let open_dir = $("div#js_float_content li[val='open_dir']");
         if (open_dir.length !== 0 && $("li#rename_list").length === 0) {
