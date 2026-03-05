@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.8.23
+// @version             0.8.24
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -1295,13 +1295,16 @@
 				t = title.match(/[A-Z]{2,5}[\-_]{1}\d{3,5}/);
 			}	
 		}else if (type=="fc2"){
-			console.log("分析fc2编号");
+			console.log("分析 fc2 编号");
 			// 支持：
 			// - FC2PPV-3281892 / FC2-PPV-3281892 / FC2 PPV 3281892
+			// - 无 PPV 格式：FC2-745325 / FC2-745325-C
 			// - 可带分段：FC2PPV-4679178-3 / FC2-PPV-4679178_4
 			// - 可带字幕标记：...-C（中文字幕语义，不作为分段）
-			let m = title.match(/(?:^|[^A-Z0-9])(FC2)[\-_ ]{0,2}(PPV)[\-_ ]{0,2}(\d{5,8})(?:[\-_ ]{0,2}([0-9]{1,2}|[A-Z]))?(?:[\-_ ]{0,2}(C))?(?=$|[^A-Z0-9])/);
+			// PPV 是可选的，匹配模式：FC2 后可选 PPV，然后是数字，可选分段，可选-C
+			let m = title.match(/(?:^|[^A-Z0-9])(FC2)(?:[\-_ ]{0,2}(PPV))?[\-_ ]{0,2}(\d{5,8})(?:[\-_ ]{0,2}([0-9]{1,2}|[A-Z]))?(?:[\-_ ]{0,2}(C))?(?=$|[^A-Z0-9])/);
 			if (m) {
+				let fc2 = m[1];
 				let num = m[3];
 				let partCandidate = m[4];
 				let cFlag = m[5];
