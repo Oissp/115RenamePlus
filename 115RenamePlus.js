@@ -700,16 +700,9 @@
     }
 
     /**
-     * 通过mgstage进行查询
-	 * 请求mgstage,并请求115进行改名
-     * @param fid               文件id
-     * @param fh                番号
-     * @param suffix            后缀
-     * @param ifChineseCaptions   是否有中文字幕
-	 * @param part            是图片时，向part传图片名冗余
-     * @param ifAddDate           是否带时间
-     * @param searchUrl         请求地址
-     */
+     * 图片名冗余
+     * @param fh    番号
+     * @param title 标题
      */
     function getPicCaptions(fh, title) {
         let regExp = new RegExp(fh + "[_-]?[A-Z]{1,5}");
