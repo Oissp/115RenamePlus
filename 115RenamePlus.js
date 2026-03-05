@@ -1,18 +1,20 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.9.1
+// @version             0.9.2
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
 // @author              db117, FAN0926, LSD08KM
-// @include             https://115.com/*
+// @match               https://115.com/*
+// @match               https://web.115.com/*
 // @domain              javbus.com
 // @domain              fanbus.blog
 // @domain              busdmm.club
 // @domain              seedmm.blog
 // @domain              adult.contents.fc2.com
 // @domain              javdb.com
+// @require             https://lib.sinaapp.com/js/jquery/3.6.0/jquery.min.js
 // @grant               GM_notification
 // @grant               GM_xmlhttpRequest
 // ==/UserScript==
