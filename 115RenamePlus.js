@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.8.24
+// @version             0.8.25
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -1252,7 +1252,8 @@
         
         // 特殊处理 FC2 的 -C（中文字幕标记），不要把它当成 part
         let fc2CFlag = false;
-        if (/FC2[-_ ]?PPV[-_ ]?\d{5,8}[-_ ]C$/i.test(title)) {
+        // 支持有 PPV 和无 PPV 两种格式：FC2-PPV-xxxxxx-C / FC2-xxxxxx-C
+        if (/FC2[-_ ]?(?:PPV[-_ ]?)?\d{5,8}[-_ ]C$/i.test(title)) {
             fc2CFlag = true;
             title = title.replace(/[-_ ]C$/i, "");
             console.log("识别 FC2-C 字幕标记，暂移除");
@@ -1392,9 +1393,19 @@
             // 先把番号里的 _ 统一成 -，避免后面处理分段时漏判
             tStr = tStr.replace(/_/g, "-");
 
-            // 从“番号本身”里识别并剥离尾部分段（避免误把日期 2015-03-19 的 -19 当分段）
+            // 从"番号本身"里识别并剥离尾部分段（避免误把日期 2015-03-19 的 -19 当分段）
             // 1) 数字分段：FC2-PPV-4679178-3 / FC2-PPV-4679178_4
             // 2) 字母分段：STAR-590A
+            // 注意：-C 是中文字幕标记，不是分段，要排除
+            
+            // 先检查是否是 FC2-xxxxxx-C 格式，如果是，先把 -C 临时去掉，避免误判为分段
+            let tempC = "";
+            if (/FC2[-_ ]?(?:PPV[-_ ]?)?\d{5,8}[-_ ]C$/i.test(tStr)) {
+                tempC = "C";
+                tStr = tStr.replace(/[-_ ]C$/i, "");
+                console.log("从番号末尾临时移除 -C 字幕标记");
+            }
+            
             // 如果前面 fc2 分支已经直接识别出 part，就不要再从番号里误剥离
             if (!part) {
                 let mNum = tStr.match(/^(.*?)-(\d{1,2})$/);
@@ -1411,6 +1422,11 @@
                     part = mLetter[2];
                     console.log("从番号末尾分离字母分段：" + part);
                 }
+            }
+            
+            // 把临时移除的 -C 标记记录到 fc2CFlag，让后续逻辑处理
+            if (tempC && !fc2CFlag) {
+                fc2CFlag = true;
             }
 
             console.log("找到番号:" + tStr);
