@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.9.3
+// @version             0.9.4
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -675,17 +675,93 @@
     }
 
     /**
-     * 通过mgstage进行查询
-	 * 请求mgstage,并请求115进行改名
-     * @param fid               文件id
+     * 通过 FC2 进行查询
+     * 请求 FC2,并请求 115 进行改名
+     * @param fid               文件 id
+     * @param rntype            改名类型 video picture
      * @param fh                番号
      * @param suffix            后缀
-     * @param ifChineseCaptions   是否有中文字幕
-	 * @param part            是图片时，向part传图片名冗余
-     * @param ifAddDate           是否带时间
-     * @param searchUrl         请求地址
+     * @param if4k              是否 4k
+     * @param ifChineseCaptions 是否有中文字幕
+     * @param part              视频分段
+     * @param ifAddDate         是否添加时间
      */
-     */
+    function renameFc2(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate) {
+        requestFC2(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, Fc2Search);
+    }
+    function requestFC2(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, searchUrl) {
+        // 从 fh 中提取纯数字编号（如 FC2-PPV-745325-C -> 745325）
+        let fc2Num = fh.match(/FC2[-_ ]?PPV[-_ ]?(\d{5,8})/i);
+        if (!fc2Num) {
+            // 兜底：如果 fh 本身就是数字
+            fc2Num = [null, fh.replace(/[^0-9]/g, "")];
+        }
+        let fc2Id = fc2Num[1];
+        
+        GM_xmlhttpRequest({
+            method: "GET",
+            url: searchUrl + fc2Id + "/",
+            onload: xhr => {
+				console.log("处理影片页 " + searchUrl + fc2Id + "/");
+                // 匹配标题
+                let response = $(xhr.responseText);
+                let title = response
+                    .find("div.items_article_MainitemThumb img")
+                    .attr("title");
+                // 如果 title 是 HTML 或为空，尝试从其他位置获取
+                if (!title || title.indexOf("<") !== -1 || title.indexOf("svg") !== -1) {
+                    title = response.find("div.items_article_MainitemThumb img").attr("alt") || "";
+                }
+                if (!title) {
+                    title = response.find("div.items_article_title a").text().trim() || "";
+                }
+                // 清理 title 中的 HTML 标签和实体
+                if (title) {
+                    let tmp = document.createElement("div");
+                    tmp.innerHTML = title;
+                    title = tmp.textContent || tmp.innerText || "";
+                    title = title.trim();
+                }
+				console.log("获取到标题 " + title );
+                // 卖家
+                let user = response
+                            .find("div.items_article_headerInfo > ul > li a:last ")
+                            .text().trim();
+                // 上架时间 上架时间：2020/06/17
+                let dateText = response
+                            .find("div.items_article_Releasedate p")
+                            .html();
+                let date = dateText ? dateText.replace(/\s+/g,"").replace(/:/g, "").replace(/\//g, "-") : "";
+				if ( rntype=="picture" ){
+					if ( fh && title ) {
+						title="";
+						user="";
+						date="";
+					}
+				}				
+                // 构建标准番号格式
+                let standardFh = "FC2-PPV-" + fc2Id;
+                // 如果原 fh 里有 -C 标记，加回去
+                if (/-C$/i.test(fh)) {
+                    standardFh += "-C";
+                }
+                
+                if (title) {
+                    // 构建新名称
+                    let newName = buildNewName(standardFh, rntype, suffix, if4k, ifChineseCaptions, part, title, date, user, ifAddDate);
+                    if (newName) {
+                        // 修改名称
+                        send_115(fid, newName, standardFh);
+                    }
+                } else if (searchUrl !== javbusUncensoredSearch) {
+                    GM_notification(getDetails(standardFh, "商品页可能已消失"));
+                    // 进行无码重查询
+                    // requestJavbus(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, javbusUncensoredSearch);
+                }
+            }
+        })
+    }
+
     function getPicCaptions(fh, title) {
         let regExp = new RegExp(fh + "[_-]?[A-Z]{1,5}");
         let match = title.toUpperCase().match(regExp);
