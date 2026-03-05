@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.10.0
+// @version             0.10.1
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -68,7 +68,6 @@
 			        rename(renameFc2, "fc2", "video", true);
 			    });	
 
-            console.log("添加按钮");
             // 结束定时任务
             clearInterval(interval);
         }
@@ -128,14 +127,12 @@
                     if (false) {
                         VideoCode = getVideoCode(file_name);
                     }
-                    console.log("正则匹配番号:" + VideoCode.fh);
                     if (VideoCode.fh) {
 						if ( rntype=="video" ){
 							// 校验是否是中文字幕
 							// 优先使用 FC2-C 标记，如果没有则用常规检查
 							let ifChineseCaptions = VideoCode.fc2C ? true : checkifChineseCaptions(VideoCode.fh, file_name);
 							// 执行查询
-							console.log("开始查询");
 							call(fid, rntype, VideoCode.fh, suffix, VideoCode.if4k, ifChineseCaptions, VideoCode.part, ifAddDate);
 						} else if ( rntype=="picture" ){
 							// 是图片时，向 part 传图片名冗余，不要中字判断，只在页面获取编号
@@ -143,7 +140,6 @@
 							let picCaptions = getPicCaptions(VideoCode.fh, file_name);
 							let ifChineseCaptions;
 							// 执行查询
-							console.log("开始查询");
 							call(fid, rntype, VideoCode.fh, suffix, VideoCode.if4k, ifChineseCaptions, picCaptions, ifAddDate);
 						}
 
@@ -195,7 +191,6 @@
 		                let actorTags = response.find("div.star-name").each(function(){
 		                    actors.push($(this).find("a").attr("title"));
 		                });
-		                console.log('演员：'+actors);
 		                resolve();
 		            }
 		        });
@@ -212,11 +207,9 @@
                     if (newName) {
                         // 修改名称
                         send_115(fid, newName, fh);
-						console.log("新名: "+newName);
                     }
                     resolve(newName);
                 }else if (searchUrl !== javbusUncensoredSearch) {
-                    console.log("查询无码 " + searchUrl);
                     // 进行无码重查询
                     requestJavbus(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, javbusUncensoredSearch);
                 }else {
@@ -304,7 +297,6 @@
         function getJavbusDetail(){
             return new Promise((resolve, reject) => {
 				if ( rntype=="picture" ){
-					console.log("跳过详情页");
 					resolve();
 				} else if ( rntype=="video" ){
 					if(moviePage){
@@ -328,7 +320,6 @@
 								let actorTags = response.find("div.star-name").each(function(){
 									actors.push($(this).find("a").attr("title"));
 								});
-								console.log('演员 '+actors);
 								/*
 								for ( let actor of actorTags) {
 									actors.push(actor.find("a").attr("title"));
@@ -355,17 +346,14 @@
                         .filter(s => !(s === "有碼" || s === "無碼" || s === "歐美" || s === "動畫" || s === "寫真" || s === "字幕" || s === "中字"))
                         .filter((s, i, arr) => arr.indexOf(s) === i)
                         .join(",");
-                    console.log(actor);
                     // 构建新名称
                     let newName = buildNewName(fh_o, rntype, suffix, if4k, ifChineseCaptions, part, title, date, actor, ifAddDate);                    
                     if (newName) {
                         // 修改名称
                         send_115(fid, newName, fh_o);
-						console.log("新名: "+newName);
                     }
                     resolve(newName);
                 }else if (searchUrl !== javbusUncensoredSearch) {
-                    console.log("查询无码 " + searchUrl);
                     // 进行无码重查询
                     requestJavbus(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, javbusUncensoredSearch);
                 }else {
@@ -492,7 +480,6 @@
         function getJavdbDetail(){
             return new Promise((resolve, reject) => {
                 if ( rntype=="picture" ){
-                    console.log("跳过详情页");
                     resolve();
                 } else if ( rntype=="video" ){
                     if(moviePage){
@@ -549,7 +536,6 @@
                                 // 兜底：有些页面结构不同，尝试仅从 /actors/ 链接抓取（避免把"有碼，無碼，歐美"等分类抓进来）
                                 // 兜底也过滤性别：只抓女演员
                                 if (!actors.length) {
-                                    console.log("[javdb] 进入兜底抓演员");
                                     response.find("a[href*=\"/actors/\"]").each(function(){
                                         let $a = $(this);
                                         let a = $a.text().trim();
@@ -560,14 +546,12 @@
                                         // 检查后面是否有 symbol female 标记
                                         let nextStrong = $a.next("strong.symbol");
                                         if (!(nextStrong.length && nextStrong.hasClass("female"))) {
-                                            console.log("[javdb] 兜底过滤男演员:", a);
                                             return;
                                         }
                                         if (actors.indexOf(a) === -1) actors.push(a);
                                     });
                                 }
 
-                                console.log('[javdb] 最终演员列表:', actors);
 
                                 // JavDB 有些情况下标题末尾会带演员名（或原文件名残留），这里用演员列表把 title 末尾的演员名剔除，保证最终格式统一
                                 if (title && actors.length) {
@@ -577,7 +561,6 @@
                                         }
                                     }
                                 }
-                                console.log('演员 '+actors);
                                 resolve();
                             }
                         });
@@ -591,12 +574,10 @@
             return new Promise((resolve, reject) => {
                 if(moviePage){
                     let actor = actors.toString();
-                    console.log(actor);
                     // 构建新名称
                     let newName = buildNewName(fh_o, rntype, suffix, if4k, ifChineseCaptions, part, title, date, actor, ifAddDate);                    if (newName) {
                         // 修改名称
                         send_115(fid, newName, fh_o);
-                        console.log("新名: "+newName);
                     }
                     resolve(newName);
                 }else {
@@ -709,7 +690,6 @@
         let match = title.toUpperCase().match(regExp);
         if (match) {
             let houzhui = title.slice( fh.length , title.length )
-            console.log("找到后缀" + houzhui);
             return houzhui;
         }
     }
@@ -941,7 +921,6 @@
         if (/FC2[-_ ]?(?:PPV[-_ ]?)?\d{5,8}[-_ ]C$/i.test(title)) {
             fc2CFlag = true;
             title = title.replace(/[-_ ]C$/i, "");
-            console.log("识别 FC2-C 字幕标记，暂移除");
         }
         
         // 传统格式：CD1, HD2, FHD3, HHB4 等（只在文件名中找，不要从整段 title 末尾取，避免误把日期 03-19 当分段）
@@ -956,7 +935,6 @@
         }
         if (part){
             part = part.toString().match(/\d+/).toString();
-            console.log("识别多集：" + part);
         }
 
 		let if4k;
@@ -971,7 +949,6 @@
 			if(if4k){ if4k = "-4kH264 版";}
 		}
 
-        console.log("修正后的 title: " + title);
 		
 		let t = '';
 		if (type=="mgstage"){
@@ -981,7 +958,6 @@
 				t = title.match(/[A-Z]{2,5}[\-_]{1}\d{3,5}/);
 			}	
 		}else if (type=="fc2"){
-			console.log("分析 fc2 编号");
 			// 支持：
 			// - FC2PPV-3281892 / FC2-PPV-3281892 / FC2 PPV 3281892
 			// - 无 PPV 格式：FC2-745325 / FC2-745325-C
@@ -998,7 +974,6 @@
 				// 如果存在分段且当前还没识别到 part，则记录下来（C 不是分段）
 				if (partCandidate && !part) {
 					part = partCandidate;
-					console.log("FC2 识别到分段：" + part);
 				}
 				if (cFlag) t += "-" + cFlag;
 				console.log("找到番号:" + t);
@@ -1088,7 +1063,6 @@
             if (/FC2[-_ ]?(?:PPV[-_ ]?)?\d{5,8}[-_ ]C$/i.test(tStr)) {
                 tempC = "C";
                 tStr = tStr.replace(/[-_ ]C$/i, "");
-                console.log("从番号末尾临时移除 -C 字幕标记");
             }
             
             // 如果前面 fc2 分支已经直接识别出 part，就不要再从番号里误剥离
@@ -1097,7 +1071,6 @@
                 if (mNum) {
                     tStr = mNum[1];
                     part = mNum[2];
-                    console.log("从番号末尾分离数字分段：" + part);
                 }
             }
             if (!part) {
@@ -1105,7 +1078,6 @@
                 if (mLetter && /[0-9][A-Z]$/.test(tStr)) {
                     tStr = mLetter[1];
                     part = mLetter[2];
-                    console.log("从番号末尾分离字母分段：" + part);
                 }
             }
             
