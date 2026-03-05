@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.8.28
+// @version             0.8.29
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -1082,12 +1082,8 @@
      * @param title 标题
      */
     function checkifChineseCaptions(fh, title) {
-        // 清理引流站前缀，避免 ".com" / ".me" 里的字母被误判为字幕
-        // 例如：489155.com@WAAA-622 / hhd800.com@FC2-PPV-xxxxxx / 4k2.me@xxx
-        if (title && (title.indexOf(".com@") !== -1 || title.indexOf(".me@") !== -1)) {
-            // 去掉形如 xxx.com@ / xxx.me@ 的前缀（数字/字母都支持）
-            title = title.replace(/\b[0-9a-z]+\.(com|me)@/ig, "");
-        }
+        // 清理引流站前缀，避免域名中的字母被误判为字幕
+        title = cleanDomainPrefix(title);
         if (title.indexOf("中文字幕") !== -1) {
             return true;
         }
@@ -1241,6 +1237,33 @@
      * @param title 标题
      * @returns {{text: *, title: *, timeout: number}}
      */
+
+    /**
+     * 清理引流站域名前缀（如 489155.com@ / hhd800.com@ / 4k2.me@）
+     * @param title 原始文件名
+     * @returns 清理后的文件名
+     */
+    function cleanDomainPrefix(title) {
+        if (!title) return title;
+        
+        // 1. 通用正则：清理 域名@ 格式（覆盖 95% 引流站）
+        // 匹配：开头 + 字母数字域名 + 常见 TLD + @
+        title = title.replace(/^\s*[0-9a-z]+\.(com|me|net|org|cc|io|biz|info|tv)@/i, "");
+        
+        // 2. 特殊硬编码：无 @ 的前缀
+        title = title
+            .replace(/^BIG2048\.COM\s*/i, "")
+            .replace(/^SIS001\s*/i, "");
+        
+        return title;
+    }
+
+    /**
+     * 获取详细信息
+     * @param text 内容
+     * @param title 标题
+     * @returns {{text: *, title: *, timeout: number}}
+     */
     function getDetails(text, title) {
         return {
             text: text,
@@ -1259,20 +1282,17 @@
         title = title.toUpperCase();
             console.log("传入 title: " + title + " type:" + type);
 
-        // 先清理引流站前缀（在识别分段之前清理，避免影响）
+        // 清理引流站前缀（通用正则 + 特殊硬编码）
+        title = cleanDomainPrefix(title);
+        
+        // 其他清理：分辨率、字幕组、来源标记等
         title = title
-            .replace("SIS001", "")
             .replace("1080P", "")
             .replace("720P", "")
             .replace("[JAV] [UNCENSORED]","")
             .replace("[THZU.CC]","")
             .replace("[22SHT.ME]","")
-            .replace("[7SHT.ME]","")
-            .replace("BIG2048.COM","")
-            .replace("FUN2048.COM@","")
-            .replace("HHD800.COM@","")
-            .replace("4K2.ME@","")
-            .replace("489155.COM@","");
+            .replace("[7SHT.ME]","");
 
         // 判断是否多集/分段：支持多种格式
         let part;
