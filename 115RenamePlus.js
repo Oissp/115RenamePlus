@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.9.4
+// @version             0.9.5
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -602,18 +602,36 @@
             });
     }
 
+
+
     /**
-     * 通过avmoo进行查询
-     * 请求avmoo,并请求115进行改名
-     * @param fid               文件id
-     * @param rntype      		改名类型 video picture
+     * 通过 FC2 进行查询
+     * 请求 FC2，并请求 115 进行改名
+     * @param fid               文件 id
+     * @param rntype            改名类型 video picture
      * @param fh                番号
      * @param suffix            后缀
-     * @param ifChineseCaptions   是否有中文字幕
-     * @param part              视频分段，图片冗余文件名 
-     * @param ifAddDate              是否添加时间 
-     * @param searchUrl               请求地址
+     * @param if4k              是否 4k
+     * @param ifChineseCaptions 是否有中文字幕
+     * @param part              视频分段
+     * @param ifAddDate         是否添加时间
      */
+    function renameFc2(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate) {
+        requestFC2(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, Fc2Search);
+    }
+    function requestFC2(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, searchUrl) {
+        // 从 fh 中提取纯数字编号（如 FC2-PPV-745325-C -> 745325）
+        let fc2Num = fh.match(/FC2[-_ ]?PPV[-_ ]?(\d{5,8})/i);
+        if (!fc2Num) {
+            // 兜底：如果 fh 本身就是数字
+            fc2Num = [null, fh.replace(/[^0-9]/g, "")];
+        }
+        let fc2Id = fc2Num[1];
+        
+        GM_xmlhttpRequest({
+            method: "GET",
+            url: searchUrl + fc2Id + "/",
+            onload: xhr => {
 				console.log("处理影片页 " + searchUrl + fc2Id + "/");
                 // 匹配标题
                 let response = $(xhr.responseText);
@@ -674,20 +692,6 @@
         })
     }
 
-    /**
-     * 通过 FC2 进行查询
-     * 请求 FC2,并请求 115 进行改名
-     * @param fid               文件 id
-     * @param rntype            改名类型 video picture
-     * @param fh                番号
-     * @param suffix            后缀
-     * @param if4k              是否 4k
-     * @param ifChineseCaptions 是否有中文字幕
-     * @param part              视频分段
-     * @param ifAddDate         是否添加时间
-     */
-    function renameFc2(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate) {
-        requestFC2(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, Fc2Search);
     }
     function requestFC2(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, searchUrl) {
         // 从 fh 中提取纯数字编号（如 FC2-PPV-745325-C -> 745325）
