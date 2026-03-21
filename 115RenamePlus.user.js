@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.10.5
+// @version             0.10.6
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -921,12 +921,18 @@
         // 判断是否多集/分段：支持多种格式
         let part;
         
-        // 特殊处理 FC2 的 -C（中文字幕标记），不要把它当成 part
+        // 特殊处理 -C（中文字幕标记），不要把它当成 part
         let fc2CFlag = false;
-        // 支持有 PPV 和无 PPV 两种格式：FC2-PPV-xxxxxx-C / FC2-xxxxxx-C
+        // FC2 格式：FC2-PPV-xxxxxx-C / FC2-xxxxxx-C
         if (/FC2[-_ ]?(?:PPV[-_ ]?)?\d{5,8}[-_ ]C$/i.test(title)) {
             fc2CFlag = true;
             title = title.replace(/[-_ ]C$/i, "");
+            console.log("识别 FC2-C 字幕标记，暂移除");
+        }
+        // 通用格式：XXXXX-XX-C（非 FC2 的番号）
+        else if (/^[A-Z]{2,10}[-_ ]?\d{2,6}[-_ ]C$/i.test(title)) {
+            title = title.replace(/[-_ ]C$/i, "");
+            console.log("识别通用-C 字幕标记，暂移除");
         }
         
         // 传统格式：CD1, HD2, FHD3, HHB4 等（只在文件名中找，不要从整段 title 末尾取，避免误把日期 03-19 当分段）
