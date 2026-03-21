@@ -1080,11 +1080,22 @@
             }
             
             // 如果前面 fc2 分支已经直接识别出 part，就不要再从番号里误剥离
+            // 如果前面 fc2 分支已经直接识别出 part，就不要再从番号里误剥离
+            // 改进：区分真正的分段（CD1/HD2 等）和番号中的数字（LAFBD-41 中的 41）
             if (!part) {
                 let mNum = tStr.match(/^(.*?)-(\d{1,2})$/);
                 if (mNum) {
-                    tStr = mNum[1];
-                    part = mNum[2];
+                    let prefix = mNum[1];
+                    let suffix = mNum[2];
+                    // 只有当前缀是传统分段标识时才分割
+                    if (prefix.match(/^(CD|HD|FHD|HHB|DISC|PART)$/i)) {
+                        tStr = prefix;
+                        part = suffix;
+                        console.log("从番号末尾分离数字分段：" + part);
+                    } else {
+                        // 对于 LAFBD-41 这种，保留完整番号
+                        console.log("保留完整番号，数字 " + suffix + " 是番号一部分");
+                    }
                 }
             }
             if (!part) {
