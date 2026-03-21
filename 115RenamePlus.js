@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.10.1
+// @version             0.10.2
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -1027,7 +1027,8 @@
 			// 通用
 			if (!t) {
 				// 允许末尾 1 个字母分段（如 STAR-590B）
-				t = title.match(/[A-Z]{2,5}[\-_]{0,1}\d{3,5}[A-Z]?/);
+				// 放宽字母数量限制到 2-10 个（支持 DANDYA-013 等长字母番号）
+				t = title.match(/[A-Z]{2,10}[\-_]{0,1}\d{3,5}[A-Z]?/);
 			}
 			if (!t) {
 				t = title.match(/\d{6}[\-_]\d{2,4}/);
