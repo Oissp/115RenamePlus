@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.10.3
+// @version             0.10.4
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -172,9 +172,10 @@
 		let getJavbusDetail = new Promise((resolve, reject) => {
 		    console.log("处理详情页：" + moviePage);
 		    if(moviePage){
-		        GM_xmlhttpRequest({
+		GM_xmlhttpRequest({
 		            method: "GET",
 		            url: moviePage,
+		            withCredentials: true,
 		            onload: xhr => {
 		                let response = $(xhr.responseText);
 		                // 标题
@@ -255,6 +256,7 @@
             GM_xmlhttpRequest({
                 method: "GET",
                 url: url_s,
+                    withCredentials: true,
                 onload: xhr => {
                     let response = $(xhr.responseText);
                     
@@ -304,6 +306,7 @@
 						GM_xmlhttpRequest({
 							method: "GET",
 							url: moviePage,
+                    withCredentials: true,
 							onload: xhr => {
 								let response = $(xhr.responseText);
 								// 标题
@@ -413,6 +416,7 @@
             GM_xmlhttpRequest({
                 method: "GET",
                 url: url_s,
+                    withCredentials: true,
                 onload: xhr => {
                     let response = $(xhr.responseText);
                     
@@ -487,6 +491,7 @@
                         GM_xmlhttpRequest({
                             method: "GET",
                             url: moviePage,
+                    withCredentials: true,
                             onload: xhr => {
                                 let response = $(xhr.responseText);
                                 // 标题
@@ -619,6 +624,7 @@
         GM_xmlhttpRequest({
             method: "GET",
             url: searchUrl + fc2Id + "/",
+                    withCredentials: true,
             onload: xhr => {
 				console.log("处理影片页 " + searchUrl + fc2Id + "/");
                 // 匹配标题
