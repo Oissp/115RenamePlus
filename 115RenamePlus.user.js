@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.10.8
+// @version             0.10.9
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -17,6 +17,7 @@
 // @require             https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js
 // @grant               GM_notification
 // @grant               GM_xmlhttpRequest
+// @connect             webapi.115.com
 // ==/UserScript==
 
     /*
