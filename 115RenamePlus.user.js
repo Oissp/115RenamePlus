@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.10.6
+// @version             0.10.7
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -918,9 +918,6 @@
             .replace("[22SHT.ME]","")
             .replace("[7SHT.ME]","");
 
-        // 判断是否多集/分段：支持多种格式
-        let part;
-        
         // 特殊处理 -C（中文字幕标记），不要把它当成 part
         let fc2CFlag = false;
         // FC2 格式：FC2-PPV-xxxxxx-C / FC2-xxxxxx-C
@@ -934,6 +931,9 @@
             title = title.replace(/[-_ ]C$/i, "");
             console.log("识别通用-C 字幕标记，暂移除");
         }
+        
+        // 判断是否多集/分段：支持多种格式
+        let part;
         
         // 传统格式：CD1, HD2, FHD3, HHB4 等（只在文件名中找，不要从整段 title 末尾取，避免误把日期 03-19 当分段）
         if (!part) {
@@ -1073,10 +1073,25 @@
             // 注意：-C 是中文字幕标记，不是分段，要排除
             
             // 先检查是否是 FC2-xxxxxx-C 格式，如果是，先把 -C 临时去掉，避免误判为分段
-            let tempC = "";
-            if (/FC2[-_ ]?(?:PPV[-_ ]?)?\d{5,8}[-_ ]C$/i.test(tStr)) {
-                tempC = "C";
-                tStr = tStr.replace(/[-_ ]C$/i, "");
+            // 如果前面 fc2 分支已经直接识别出 part，就不要再从番号里误剥离
+            // 改进：区分真正的分段（CD1/HD2等）和番号中的数字（LAFBD-41中的41）
+            if (!part) {
+                let mNum = tStr.match(/^(.*?)-(\d{1,2})$/);
+                if (mNum) {
+                    let prefix = mNum[1];
+                    let suffix = mNum[2];
+                    // 只有当字母部分是传统分段标识（CD/HD/FHD等）或数字是较大编号时才是分段
+                    // 对于 LAFBD-41 这种，应该保留完整番号
+                    if (prefix.match(/^(CD|HD|FHD|HHB|DISC|PART)$/i)) {
+                        tStr = prefix;
+                        part = suffix;
+                        console.log("从番号末尾分离数字分段：" + part);
+                    } else {
+                        // 对于 LAFBD-41 这种，保留完整番号
+                        console.log("保留完整番号，数字 " + suffix + " 是番号一部分");
+                    }
+                }
+            }
             }
             
             // 如果前面 fc2 分支已经直接识别出 part，就不要再从番号里误剥离
