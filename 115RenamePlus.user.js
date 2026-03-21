@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.10.7
+// @version             0.10.8
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -837,22 +837,36 @@
      */
     function send_115(id, name, fh) {
         let file_name = stringStandard(name);
-        $.post("https://webapi.115.com/files/edit", {
-                fid: id,
-                file_name: file_name
+        GM_xmlhttpRequest({
+            method: "POST",
+            url: "https://webapi.115.com/files/edit",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
             },
-            function (data, status) {
-                let result = JSON.parse(data);
-                if (!result.state) {
+            data: "fid=" + id + "&file_name=" + encodeURIComponent(file_name),
+            withCredentials: true,
+            onload: function (xhr) {
+                try {
+                    let result = JSON.parse(xhr.responseText);
+                    if (!result.state) {
+                        GM_notification(getDetails(fh, "修改失败"));
+                        console.log("请求 115 接口异常：" + (result.error || "未知错误"));
+                    } else {
+                        GM_notification(getDetails(fh, "修改成功"));
+                        console.log("修改文件名称,fh:" + fh, "name:" + file_name);
+                        // 刷新文件列表
+                        setTimeout(function() { location.reload(); }, 1000);
+                    }
+                } catch (e) {
                     GM_notification(getDetails(fh, "修改失败"));
-                    console.log("请求115接口异常: " + unescape(result.error
-                        .replace(/\\(u[0-9a-fA-F]{4})/gm, '%$1')));
-                } else {
-                    GM_notification(getDetails(fh, "修改成功"));
-                    console.log("修改文件名称,fh:" + fh, "name:" + file_name);
+                    console.log("解析响应失败:", e);
                 }
+            },
+            onerror: function (e) {
+                GM_notification(getDetails(fh, "修改失败"));
+                console.log("请求失败:", e);
             }
-        );
+        });
     }
 
     /**
