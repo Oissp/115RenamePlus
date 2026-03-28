@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.0-beta.8
+// @version             0.12.0-beta.9
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/new-ui-adapt/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/new-ui-adapt/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名) - 新版UI适配测试版
@@ -242,30 +242,20 @@
                 return;
             }
             
-            // 隐藏不需要的按钮：标签、备注、分享
-            const existingButtons = btnContainer.querySelectorAll('button');
-            existingButtons.forEach(btn => {
-                const text = btn.innerText?.trim() || btn.title;
-                if (text === '标签' || text === '备注' || text === '分享') {
-                    btn.style.display = 'none';
-                }
-            });
+            // 隐藏不需要的按钮及其父容器：标签、备注、分享
+            hideButtonsByText(btnContainer, ['标签', '备注', '分享']);
             
             // 找到"重命名"按钮
-            let renameBtn = null;
-            existingButtons.forEach(btn => {
-                if (btn.innerText?.trim() === '重命名' || btn.title === '重命名') {
-                    renameBtn = btn;
-                }
-            });
+            let renameBtn = findButtonByText(btnContainer, '重命名');
             
-            // 创建改名按钮
+            // 创建改名按钮（带图标样式，参考原有按钮）
             const btnClass = 'flex items-center space-x-1 px-3 py-0.5 text-xs hover:bg-blue-50 text-gray-700 transition-colors cursor-pointer';
             
-            // JavBus 按钮
+            // JavBus 按钮 - 橙色图标
             const javbusBtn = document.createElement('button');
             javbusBtn.className = btnClass;
-            javbusBtn.innerHTML = '<span>改名JavBus</span>';
+            javbusBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span style="font-size:14px;">JavBus</span>';
+            javbusBtn.title = '通过JavBus改名';
             javbusBtn.setAttribute('data-action', 'rename-javbus');
             javbusBtn.addEventListener('click', function(e) {
                 e.stopPropagation();
@@ -273,10 +263,11 @@
                 renameFromHoverMenuByFileName(fileName, renameJavbus, 'javbus', 'video', true);
             });
             
-            // JavDB 按钮
+            // JavDB 按钮 - 蓝色图标
             const javdbBtn = document.createElement('button');
             javdbBtn.className = btnClass;
-            javdbBtn.innerHTML = '<span>改名JavDB</span>';
+            javdbBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h6M9 15h3"/></svg><span style="font-size:14px;">JavDB</span>';
+            javdbBtn.title = '通过JavDB改名';
             javdbBtn.setAttribute('data-action', 'rename-javdb');
             javdbBtn.addEventListener('click', function(e) {
                 e.stopPropagation();
@@ -284,10 +275,11 @@
                 renameFromHoverMenuByFileName(fileName, renameJavdb, 'javdb', 'video', true);
             });
             
-            // FC2 按钮
+            // FC2 按钮 - 紫色图标
             const fc2Btn = document.createElement('button');
             fc2Btn.className = btnClass;
-            fc2Btn.innerHTML = '<span>改名FC2</span>';
+            fc2Btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg><span style="font-size:14px;">FC2</span>';
+            fc2Btn.title = '通过FC2改名';
             fc2Btn.setAttribute('data-action', 'rename-fc2');
             fc2Btn.addEventListener('click', function(e) {
                 e.stopPropagation();
@@ -295,20 +287,10 @@
                 renameFromHoverMenuByFileName(fileName, renameFc2, 'fc2', 'video', true);
             });
             
-            // 在"重命名"按钮后面插入（如果找不到就添加到末尾）
-            if (renameBtn && renameBtn.nextSibling) {
-                renameBtn.parentNode.insertBefore(javbusBtn, renameBtn.nextSibling);
-                renameBtn.parentNode.insertBefore(javdbBtn, javbusBtn.nextSibling);
-                renameBtn.parentNode.insertBefore(fc2Btn, javdbBtn.nextSibling);
-            } else if (renameBtn) {
-                renameBtn.parentNode.appendChild(javbusBtn);
-                renameBtn.parentNode.appendChild(javdbBtn);
-                renameBtn.parentNode.appendChild(fc2Btn);
-            } else {
-                btnContainer.appendChild(javbusBtn);
-                btnContainer.appendChild(javdbBtn);
-                btnContainer.appendChild(fc2Btn);
-            }
+            // 在"重命名"按钮后面插入
+            insertAfter(renameBtn, javbusBtn);
+            insertAfter(javbusBtn, javdbBtn);
+            insertAfter(javdbBtn, fc2Btn);
             
             // 标记已注入
             item.setAttribute('data-rename-buttons-injected', 'true');
@@ -320,6 +302,53 @@
             setupMutationObserver();
             window.__115RenamePlusObserverSet = true;
         }
+    }
+    
+    /**
+     * 隐藏指定文本的按钮
+     */
+    function hideButtonsByText(container, texts) {
+        const buttons = container.querySelectorAll('button');
+        buttons.forEach(btn => {
+            const text = (btn.innerText || btn.title || '').trim();
+            if (texts.includes(text)) {
+                // 隐藏按钮及其父容器
+                const parent = btn.parentElement;
+                if (parent && parent.classList.contains('relative')) {
+                    parent.style.display = 'none';
+                } else {
+                    btn.style.display = 'none';
+                }
+            }
+        });
+    }
+    
+    /**
+     * 查找指定文本的按钮
+     */
+    function findButtonByText(container, text) {
+        const buttons = container.querySelectorAll('button');
+        for (const btn of buttons) {
+            if ((btn.innerText || btn.title || '').trim() === text) {
+                return btn;
+            }
+        }
+        return null;
+    }
+    
+    /**
+     * 在元素后面插入
+     */
+    function insertAfter(targetElement, newElement) {
+        if (!targetElement || !newElement) return false;
+        const parent = targetElement.parentNode;
+        if (!parent) return false;
+        if (targetElement.nextSibling) {
+            parent.insertBefore(newElement, targetElement.nextSibling);
+        } else {
+            parent.appendChild(newElement);
+        }
+        return true;
     }
     
     /**
@@ -377,69 +406,48 @@
         const btnContainer = hoverMenu.querySelector('[class*="bg-white rounded-md"]');
         if (!btnContainer) return;
         
-        // 隐藏不需要的按钮：标签、备注、分享
-        const buttons = btnContainer.querySelectorAll('button');
-        buttons.forEach(btn => {
-            const text = btn.innerText?.trim() || btn.title;
-            if (text === '标签' || text === '备注' || text === '分享') {
-                btn.style.display = 'none';
-            }
-        });
+        // 隐藏不需要的按钮
+        hideButtonsByText(btnContainer, ['标签', '备注', '分享']);
         
         // 找到"重命名"按钮
-        let renameBtn = null;
-        buttons.forEach(btn => {
-            if (btn.innerText?.trim() === '重命名' || btn.title === '重命名') {
-                renameBtn = btn;
-            }
-        });
+        const renameBtn = findButtonByText(btnContainer, '重命名');
         
         const btnClass = 'flex items-center space-x-1 px-3 py-0.5 text-xs hover:bg-blue-50 text-gray-700 transition-colors cursor-pointer';
         
-        // JavBus
+        // JavBus 按钮 - 橙色图标
         const javbusBtn = document.createElement('button');
         javbusBtn.className = btnClass;
-        javbusBtn.innerHTML = '<span>改名JavBus</span>';
+        javbusBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span style="font-size:14px;">JavBus</span>';
+        javbusBtn.title = '通过JavBus改名';
         javbusBtn.addEventListener('click', function(e) {
             e.stopPropagation();
-            console.log('[115RenamePlus] 点击JavBus, 文件名:', fileName);
             renameFromHoverMenuByFileName(fileName, renameJavbus, 'javbus', 'video', true);
         });
         
-        // JavDB
+        // JavDB 按钮 - 蓝色图标
         const javdbBtn = document.createElement('button');
         javdbBtn.className = btnClass;
-        javdbBtn.innerHTML = '<span>改名JavDB</span>';
+        javdbBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h6M9 15h3"/></svg><span style="font-size:14px;">JavDB</span>';
+        javdbBtn.title = '通过JavDB改名';
         javdbBtn.addEventListener('click', function(e) {
             e.stopPropagation();
-            console.log('[115RenamePlus] 点击JavDB, 文件名:', fileName);
             renameFromHoverMenuByFileName(fileName, renameJavdb, 'javdb', 'video', true);
         });
         
-        // FC2
+        // FC2 按钮 - 紫色图标
         const fc2Btn = document.createElement('button');
         fc2Btn.className = btnClass;
-        fc2Btn.innerHTML = '<span>改名FC2</span>';
+        fc2Btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg><span style="font-size:14px;">FC2</span>';
+        fc2Btn.title = '通过FC2改名';
         fc2Btn.addEventListener('click', function(e) {
             e.stopPropagation();
-            console.log('[115RenamePlus] 点击FC2, 文件名:', fileName);
             renameFromHoverMenuByFileName(fileName, renameFc2, 'fc2', 'video', true);
         });
         
-        // 在"重命名"按钮后面插入（如果找不到就添加到末尾）
-        if (renameBtn && renameBtn.nextSibling) {
-            renameBtn.parentNode.insertBefore(javbusBtn, renameBtn.nextSibling);
-            renameBtn.parentNode.insertBefore(javdbBtn, javbusBtn.nextSibling);
-            renameBtn.parentNode.insertBefore(fc2Btn, javdbBtn.nextSibling);
-        } else if (renameBtn) {
-            renameBtn.parentNode.appendChild(javbusBtn);
-            renameBtn.parentNode.appendChild(javdbBtn);
-            renameBtn.parentNode.appendChild(fc2Btn);
-        } else {
-            btnContainer.appendChild(javbusBtn);
-            btnContainer.appendChild(javdbBtn);
-            btnContainer.appendChild(fc2Btn);
-        }
+        // 在"重命名"按钮后面插入
+        insertAfter(renameBtn, javbusBtn);
+        insertAfter(javbusBtn, javdbBtn);
+        insertAfter(javdbBtn, fc2Btn);
         
         item.setAttribute('data-rename-buttons-injected', 'true');
     }
