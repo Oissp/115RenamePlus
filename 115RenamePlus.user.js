@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.0-beta.5
+// @version             0.12.0-beta.6
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/new-ui-adapt/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/new-ui-adapt/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名) - 新版UI适配测试版
@@ -393,7 +393,8 @@
      * 从hover菜单触发改名（通过文件名匹配，使用 API 获取正确的 fid）
      */
     async function renameFromHoverMenuByFileName(fileName, call, site, rntype, ifAddDate) {
-        console.log('[115RenamePlus] 开始处理文件:', fileName);
+        console.log('[115RenamePlus] ========== 开始改名流程 ==========');
+        console.log('[115RenamePlus] 目标文件名:', fileName);
         
         // 获取当前目录 cid
         const currentCid = getCurrentCid();
@@ -402,29 +403,38 @@
         // 通过 API 获取文件列表
         const fileList = await fetchFileListByAPI(currentCid);
         if (!fileList || fileList.length === 0) {
-            console.log('[115RenamePlus] API 返回文件列表为空');
+            console.log('[115RenamePlus] ❌ API 返回文件列表为空');
             GM_notification(getDetails(fileName, '无法获取文件数据'));
             return;
         }
         
         console.log('[115RenamePlus] API 返回文件数量:', fileList.length);
         
+        // 打印所有文件的 cid 和 名称
+        console.log('[115RenamePlus] 文件列表:');
+        fileList.forEach((f, i) => {
+            console.log('  [' + i + '] n=' + f.n + ', cid=' + f.cid + ', fid=' + f.fid + ', ico=' + f.ico);
+        });
+        
         // 用文件名匹配找到对应的文件
         const fileData = fileList.find(f => f.n === fileName);
         if (!fileData) {
-            console.log('[115RenamePlus] 未找到匹配的文件:', fileName);
+            console.log('[115RenamePlus] ❌ 未找到匹配的文件:', fileName);
             GM_notification(getDetails(fileName, '未找到文件'));
             return;
         }
         
-        console.log('[115RenamePlus] 找到文件:', fileData.n, 'fid:', fileData.cid);
+        console.log('[115RenamePlus] ✅ 找到目标文件!');
+        console.log('[115RenamePlus] 文件完整数据:', JSON.stringify(fileData, null, 2));
         
-        // 文件ID
-        const fid = fileData.cid;
+        // 文件ID - 注意：文件用 fid 或 cid，文件夹用 cid
+        const fid = fileData.fid || fileData.cid;
+        console.log('[115RenamePlus] 使用 fid:', fid);
+        
         // 文件名
         let file_name = fileData.n;
-        // 是否是文件夹（m=0 表示文件夹，或者没有扩展名）
-        const isFolder = fileData.m === 0;
+        // 是否是文件夹（ico=0 表示文件夹）
+        const isFolder = fileData.ico === 0;
         
         // 后缀名
         let suffix;
