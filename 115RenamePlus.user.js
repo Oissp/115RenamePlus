@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.0-beta.6
+// @version             0.12.0-beta.7
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/new-ui-adapt/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/new-ui-adapt/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名) - 新版UI适配测试版
@@ -1462,6 +1462,7 @@
         }
         // 通用格式：XXXXX-XX-C（非 FC2 的番号）
         else if (/^[A-Z]{2,10}[-_ ]?\d{2,6}[-_ ]C$/i.test(title)) {
+            fc2CFlag = true;  // 修复：设置字幕标记
             title = title.replace(/[-_ ]C$/i, "");
             console.log("识别通用-C 字幕标记，暂移除");
         }
