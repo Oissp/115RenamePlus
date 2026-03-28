@@ -24,6 +24,12 @@
      * @param suffix            后缀，就是扩展名
      */
 (function () {
+    'use strict';
+    
+    // 标记脚本已加载
+    window.__115RenamePlusLoaded = true;
+    console.log('[115RenamePlus] 脚本已加载, 版本 0.11.0');
+    
     // 新版UI按钮样式
     let rename_btn_class = "flex items-center gap-1.5 px-3 py-1.5 text-xs lg:text-sm xl:text-base rounded transition-colors whitespace-nowrap flex-shrink-0 text-white hover:bg-blue-500";
     
@@ -40,13 +46,14 @@
             </button>
         `;
     
+    // 记录是否已添加按钮
+    let buttonsAdded = false;
+    
     /**
      * 添加按钮的定时任务
      */
     let interval = setInterval(buttonInterval, 1000);
-    
-    // 记录是否已添加按钮
-    let buttonsAdded = false;
+    console.log('[115RenamePlus] 定时器已启动');
 
     // javbus
     let javbusBase = "https://www.javbus.com/";
@@ -112,32 +119,40 @@
             }
         });
         
+        console.log('[115RenamePlus] 检测操作栏, 重命名按钮:', !!renameBtn, '按钮已添加:', buttonsAdded);
+        
         if (renameBtn && !buttonsAdded) {
             // 找到操作栏容器
             let actionBar = renameBtn.parentElement;
+            console.log('[115RenamePlus] 找到操作栏, parent:', actionBar?.className?.substring(0, 50));
+            
             if (actionBar) {
                 // 在重命名按钮后面插入改名按钮
                 actionBar.insertAdjacentHTML('beforeend', rename_buttons);
                 
                 // 绑定事件
                 document.getElementById('rename_video_javbus')?.addEventListener('click', function() {
+                    console.log('[115RenamePlus] JavBus按钮被点击');
                     rename(renameJavbus, "javbus", "video", true);
                 });
                 document.getElementById('rename_video_javdb')?.addEventListener('click', function() {
+                    console.log('[115RenamePlus] JavDB按钮被点击');
                     rename(renameJavdb, "javdb", "video", true);
                 });
                 document.getElementById('rename_video_FC2')?.addEventListener('click', function() {
+                    console.log('[115RenamePlus] FC2按钮被点击');
                     rename(renameFc2, "fc2", "video", true);
                 });
                 
                 buttonsAdded = true;
-                console.log('新版UI按钮已添加');
+                console.log('[115RenamePlus] 新版UI按钮已添加');
             }
         }
         
         // 如果操作栏消失了（取消选中），重置按钮状态以便下次选中时重新添加
         if (!renameBtn && buttonsAdded) {
             buttonsAdded = false;
+            console.log('[115RenamePlus] 操作栏消失，重置按钮状态');
         }
     }
 
