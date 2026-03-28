@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.0-beta.4
+// @version             0.12.0-beta.5
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/new-ui-adapt/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/new-ui-adapt/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名) - 新版UI适配测试版
@@ -29,6 +29,50 @@
     // 标记脚本已加载
     window.__115RenamePlusLoaded = true;
     console.log('[115RenamePlus] 脚本已加载, 版本 0.12.0-beta.4 (新版UI测试)');
+    
+    // 添加全局调试函数
+    window.debug115RenamePlus = async function(fileName) {
+        const cid = new URL(window.location.href).searchParams.get('cid') || '0';
+        const apiUrl = 'https://webapi.115.com/files?aid=1&cid=' + cid + '&offset=0&limit=50&type=0&show_dir=1&fc_mix=1&natsort=1&format=json';
+        
+        console.log('[Debug] 请求 API:', apiUrl);
+        
+        return new Promise((resolve) => {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: apiUrl,
+                withCredentials: true,
+                onload: function(response) {
+                    console.log('[Debug] API 响应:', response.responseText.substring(0, 1000));
+                    try {
+                        const data = JSON.parse(response.responseText);
+                        console.log('[Debug] state:', data.state);
+                        console.log('[Debug] 文件数量:', data.data?.length);
+                        
+                        if (data.data) {
+                            data.data.forEach((f, i) => {
+                                console.log('[Debug] 文件' + i + ':', f.n, 'cid:', f.cid, 'fid:', f.fid);
+                            });
+                            
+                            if (fileName) {
+                                const found = data.data.find(f => f.n === fileName);
+                                console.log('[Debug] 查找文件:', fileName, '结果:', found);
+                            }
+                        }
+                        resolve(data);
+                    } catch(e) {
+                        console.log('[Debug] 解析错误:', e);
+                        resolve(null);
+                    }
+                },
+                onerror: function(err) {
+                    console.log('[Debug] 请求错误:', err);
+                    resolve(null);
+                }
+            });
+        });
+    };
+    console.log('[115RenamePlus] 调试函数已挂载: window.debug115RenamePlus("文件名")');
     
     // 新版UI按钮样式
     let rename_btn_class = "flex items-center gap-1.5 px-3 py-1.5 text-xs lg:text-sm xl:text-base rounded transition-colors whitespace-nowrap flex-shrink-0 text-white hover:bg-blue-500";
