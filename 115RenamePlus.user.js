@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.11.0
+// @version             0.12.0-beta.1
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/new-ui-adapt/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/new-ui-adapt/115RenamePlus.user.js
-// @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名) - 新版UI适配
+// @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名) - 新版UI适配测试版
 // @author              db117, FAN0926, LSD08KM
 // @match               https://115.com/*
 // @match               https://web.115.com/*
@@ -28,7 +28,7 @@
     
     // 标记脚本已加载
     window.__115RenamePlusLoaded = true;
-    console.log('[115RenamePlus] 脚本已加载, 版本 0.11.0');
+    console.log('[115RenamePlus] 脚本已加载, 版本 0.12.0-beta.1 (新版UI测试)');
     
     // 新版UI按钮样式
     let rename_btn_class = "flex items-center gap-1.5 px-3 py-1.5 text-xs lg:text-sm xl:text-base rounded transition-colors whitespace-nowrap flex-shrink-0 text-white hover:bg-blue-500";
