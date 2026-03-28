@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.10.9
-// @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
-// @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
-// @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
+// @version             0.11.0
+// @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/new-ui-adapt/115RenamePlus.user.js
+// @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/new-ui-adapt/115RenamePlus.user.js
+// @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名) - 新版UI适配
 // @author              db117, FAN0926, LSD08KM
 // @match               https://115.com/*
 // @match               https://web.115.com/*
@@ -24,18 +24,29 @@
      * @param suffix            后缀，就是扩展名
      */
 (function () {
-    // 按钮
-    let rename_list = `
-            <li id="rename_list">
-                <a id="rename_video_javbus" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名javbus</span></a>
-                <a id="rename_video_javdb" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名javdb</span></a>
-                <a id="rename_video_FC2" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名FC2</span></a>
-            </li>
+    // 新版UI按钮样式
+    let rename_btn_class = "flex items-center gap-1.5 px-3 py-1.5 text-xs lg:text-sm xl:text-base rounded transition-colors whitespace-nowrap flex-shrink-0 text-white hover:bg-blue-500";
+    
+    // 按钮 HTML（新版UI适配）
+    let rename_buttons = `
+            <button id="rename_video_javbus" class="${rename_btn_class}" title="视频改名javbus">
+                <span>改名JavBus</span>
+            </button>
+            <button id="rename_video_javdb" class="${rename_btn_class}" title="视频改名javdb">
+                <span>改名JavDB</span>
+            </button>
+            <button id="rename_video_FC2" class="${rename_btn_class}" title="视频改名FC2">
+                <span>改名FC2</span>
+            </button>
         `;
+    
     /**
      * 添加按钮的定时任务
      */
     let interval = setInterval(buttonInterval, 1000);
+    
+    // 记录是否已添加按钮
+    let buttonsAdded = false;
 
     // javbus
     let javbusBase = "https://www.javbus.com/";
@@ -50,11 +61,99 @@
     'use strict';
 
     /**
+     * 检测是否为新版UI
+     */
+    function isNewUI() {
+        // 新版UI特征：有 file-list-item class，没有 iframe[rel='wangpan']
+        return document.querySelector('.file-list-item') !== null && 
+               document.querySelector('iframe[rel="wangpan"]') === null;
+    }
+
+    /**
+     * 从 localStorage 获取文件列表数据
+     */
+    function getFileListFromStorage() {
+        try {
+            const fileListPersist = localStorage.getItem('115life_file_list_persist');
+            if (!fileListPersist) return null;
+            const parsed = JSON.parse(fileListPersist);
+            return parsed.state?.files || null;
+        } catch (e) {
+            console.log('获取文件列表失败:', e);
+            return null;
+        }
+    }
+
+    /**
      * 添加按钮定时任务(检测到可以添加时添加按钮)
+     * 同时支持新版和旧版UI
      */
     function buttonInterval() {
+        if (isNewUI()) {
+            // 新版UI：检测操作栏
+            buttonIntervalNewUI();
+        } else {
+            // 旧版UI：检测右键菜单
+            buttonIntervalOldUI();
+        }
+    }
+
+    /**
+     * 新版UI按钮注入
+     */
+    function buttonIntervalNewUI() {
+        // 查找操作栏（选中文件后出现的顶部栏）
+        // 查找包含"重命名"按钮的容器
+        let renameBtn = null;
+        const buttons = document.querySelectorAll('button');
+        buttons.forEach(b => {
+            if (b.innerText?.trim() === '重命名') {
+                renameBtn = b;
+            }
+        });
+        
+        if (renameBtn && !buttonsAdded) {
+            // 找到操作栏容器
+            let actionBar = renameBtn.parentElement;
+            if (actionBar) {
+                // 在重命名按钮后面插入改名按钮
+                actionBar.insertAdjacentHTML('beforeend', rename_buttons);
+                
+                // 绑定事件
+                document.getElementById('rename_video_javbus')?.addEventListener('click', function() {
+                    rename(renameJavbus, "javbus", "video", true);
+                });
+                document.getElementById('rename_video_javdb')?.addEventListener('click', function() {
+                    rename(renameJavdb, "javdb", "video", true);
+                });
+                document.getElementById('rename_video_FC2')?.addEventListener('click', function() {
+                    rename(renameFc2, "fc2", "video", true);
+                });
+                
+                buttonsAdded = true;
+                console.log('新版UI按钮已添加');
+            }
+        }
+        
+        // 如果操作栏消失了（取消选中），重置按钮状态以便下次选中时重新添加
+        if (!renameBtn && buttonsAdded) {
+            buttonsAdded = false;
+        }
+    }
+
+    /**
+     * 旧版UI按钮注入（保留兼容）
+     */
+    function buttonIntervalOldUI() {
         let open_dir = $("div#js_float_content li[val='open_dir']");
         if (open_dir.length !== 0 && $("li#rename_list").length === 0) {
+            let rename_list = `
+                    <li id="rename_list">
+                        <a id="rename_video_javbus" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名javbus</span></a>
+                        <a id="rename_video_javdb" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名javdb</span></a>
+                        <a id="rename_video_FC2" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名FC2</span></a>
+                    </li>
+                `;
             open_dir.before(rename_list);
 			$("a#rename_video_javbus").click(
 			    function () {
@@ -82,6 +181,96 @@
      * @param ifAddDate   是否添加时间
      */
     function rename(call, site, rntype, ifAddDate ) {
+        if (isNewUI()) {
+            renameNewUI(call, site, rntype, ifAddDate);
+        } else {
+            renameOldUI(call, site, rntype, ifAddDate);
+        }
+    }
+
+    /**
+     * 新版UI改名方法
+     */
+    function renameNewUI(call, site, rntype, ifAddDate) {
+        // 从 localStorage 获取文件列表
+        const fileList = getFileListFromStorage();
+        if (!fileList) {
+            console.log('无法获取文件列表数据');
+            GM_notification(getDetails('', '无法获取文件数据'));
+            return;
+        }
+        
+        // 获取所有选中的文件项
+        const selectedItems = document.querySelectorAll('.file-list-item');
+        
+        selectedItems.forEach(function(item) {
+            const checkbox = item.querySelector('input[type=checkbox]');
+            if (!checkbox || !checkbox.checked) return;
+            
+            // 获取 data-index
+            const dataIndex = item.getAttribute('data-index');
+            if (dataIndex === null) return;
+            
+            // 从 localStorage 文件列表中获取对应文件
+            const fileData = fileList[parseInt(dataIndex)];
+            if (!fileData) {
+                console.log('未找到文件数据, index:', dataIndex);
+                return;
+            }
+            
+            // 文件ID (cid)
+            const fid = fileData.cid;
+            // 文件名 (n)
+            let file_name = fileData.n;
+            // 文件类型：文件夹的 m=0, 文件有大小
+            const isFolder = fileData.m === 0 || fileData.e === '';
+            
+            // 后缀名
+            let suffix;
+            if (!isFolder) {
+                let lastIndexOf = file_name.lastIndexOf('.');
+                if (lastIndexOf !== -1) {
+                    suffix = file_name.substring(lastIndexOf, file_name.length);
+                    file_name = file_name.substring(0, lastIndexOf);
+                }
+            }
+            
+            if (fid && file_name) {
+                let VideoCode;
+                // 正则匹配番号
+                if (site == "mgstage"){
+                    VideoCode = getVideoCode(file_name,"mgstage");
+                }else if (site == "fc2"){
+                    VideoCode = getVideoCode(file_name,"fc2");
+                }else{
+                    // 兜底：即使不是 fc2 按钮，也尝试识别 FC2 番号
+                    if (/FC2(?:[-_ ]?PPV)?/i.test(file_name)) {
+                        VideoCode = getVideoCode(file_name,"fc2");
+                    } else {
+                        VideoCode = getVideoCode(file_name);
+                    }
+                }
+                
+                if (VideoCode && VideoCode.fh) {
+                    if (rntype == "video"){
+                        // 校验是否是中文字幕
+                        let ifChineseCaptions = VideoCode.fc2C ? true : checkifChineseCaptions(VideoCode.fh, file_name);
+                        // 执行查询
+                        call(fid, rntype, VideoCode.fh, suffix, VideoCode.if4k, ifChineseCaptions, VideoCode.part, ifAddDate);
+                    } else if (rntype == "picture"){
+                        let picCaptions = getPicCaptions(VideoCode.fh, file_name);
+                        let ifChineseCaptions;
+                        call(fid, rntype, VideoCode.fh, suffix, VideoCode.if4k, ifChineseCaptions, picCaptions, ifAddDate);
+                    }
+                }
+            }
+        });
+    }
+
+    /**
+     * 旧版UI改名方法（保留兼容）
+     */
+    function renameOldUI(call, site, rntype, ifAddDate) {
         // 获取所有已选择的文件
         let list = $("iframe[rel='wangpan']")
             .contents()
@@ -147,8 +336,6 @@
                     }
                 }
             });
-		// if(!Main.ReInstance({type:'', star:'', is_q: '', is_share:''})){window.location.reload();}
-		// if(list){window.location.reload();}
     }
     /**
      * 通过avmoo搜索+javbus详情页进行查询
