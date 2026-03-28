@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.0-beta.2
+// @version             0.12.0-beta.3
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/new-ui-adapt/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/new-ui-adapt/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名) - 新版UI适配测试版
@@ -28,7 +28,7 @@
     
     // 标记脚本已加载
     window.__115RenamePlusLoaded = true;
-    console.log('[115RenamePlus] 脚本已加载, 版本 0.12.0-beta.2 (新版UI测试)');
+    console.log('[115RenamePlus] 脚本已加载, 版本 0.12.0-beta.3 (新版UI测试)');
     
     // 新版UI按钮样式
     let rename_btn_class = "flex items-center gap-1.5 px-3 py-1.5 text-xs lg:text-sm xl:text-base rounded transition-colors whitespace-nowrap flex-shrink-0 text-white hover:bg-blue-500";
@@ -90,6 +90,48 @@
             return null;
         }
     }
+    
+    /**
+     * 通过 API 获取当前目录的文件列表（新版UI专用）
+     * localStorage 数据不可靠，需要通过 API 获取正确的 fid
+     */
+    function fetchFileListByAPI(cid) {
+        return new Promise((resolve, reject) => {
+            const apiUrl = 'https://webapi.115.com/files/getfiles?aid=1&cid=' + cid + '&o=user_ptime&asc=0&offset=0&limit=100&show_dir=1&source=&type=all&suffix=&star=0&fc_mix=0';
+            
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: apiUrl,
+                withCredentials: true,
+                onload: function(response) {
+                    try {
+                        const data = JSON.parse(response.responseText);
+                        if (data.state && data.data) {
+                            resolve(data.data);
+                        } else {
+                            console.log('[115RenamePlus] API 返回数据异常:', data);
+                            resolve(null);
+                        }
+                    } catch (e) {
+                        console.log('[115RenamePlus] 解析 API 响应失败:', e);
+                        resolve(null);
+                    }
+                },
+                onerror: function(error) {
+                    console.log('[115RenamePlus] API 请求失败:', error);
+                    resolve(null);
+                }
+            });
+        });
+    }
+    
+    /**
+     * 获取当前目录 cid
+     */
+    function getCurrentCid() {
+        const url = new URL(window.location.href);
+        return url.searchParams.get('cid') || '0';
+    }
 
     /**
      * 添加按钮定时任务(检测到可以添加时添加按钮)
@@ -119,10 +161,12 @@
                 return;
             }
             
-            // 获取 data-index
-            const dataIndex = item.getAttribute('data-index');
-            if (!dataIndex) {
-                console.log('[115RenamePlus] 文件项', index, '没有data-index');
+            // 获取文件名（从 DOM 获取，而不是依赖 localStorage）
+            const nameEl = item.querySelector('.file-name-responsive');
+            const fileName = nameEl?.getAttribute('title') || nameEl?.innerText;
+            
+            if (!fileName) {
+                console.log('[115RenamePlus] 文件项', index, '没有找到文件名');
                 return;
             }
             
@@ -150,8 +194,8 @@
             javbusBtn.setAttribute('data-action', 'rename-javbus');
             javbusBtn.addEventListener('click', function(e) {
                 e.stopPropagation();
-                const dataIndex = item.getAttribute('data-index');
-                renameFromHoverMenu(dataIndex, renameJavbus, 'javbus', 'video', true);
+                console.log('[115RenamePlus] 点击JavBus, 文件名:', fileName);
+                renameFromHoverMenuByFileName(fileName, renameJavbus, 'javbus', 'video', true);
             });
             
             // JavDB 按钮
@@ -161,8 +205,8 @@
             javdbBtn.setAttribute('data-action', 'rename-javdb');
             javdbBtn.addEventListener('click', function(e) {
                 e.stopPropagation();
-                const dataIndex = item.getAttribute('data-index');
-                renameFromHoverMenu(dataIndex, renameJavdb, 'javdb', 'video', true);
+                console.log('[115RenamePlus] 点击JavDB, 文件名:', fileName);
+                renameFromHoverMenuByFileName(fileName, renameJavdb, 'javdb', 'video', true);
             });
             
             // FC2 按钮
@@ -172,8 +216,8 @@
             fc2Btn.setAttribute('data-action', 'rename-fc2');
             fc2Btn.addEventListener('click', function(e) {
                 e.stopPropagation();
-                const dataIndex = item.getAttribute('data-index');
-                renameFromHoverMenu(dataIndex, renameFc2, 'fc2', 'video', true);
+                console.log('[115RenamePlus] 点击FC2, 文件名:', fileName);
+                renameFromHoverMenuByFileName(fileName, renameFc2, 'fc2', 'video', true);
             });
             
             // 在"更多"按钮后面插入（或直接添加到末尾）
@@ -183,7 +227,7 @@
             
             // 标记已注入
             item.setAttribute('data-rename-buttons-injected', 'true');
-            console.log('[115RenamePlus] 文件项', index, '按钮已注入');
+            console.log('[115RenamePlus] 文件项', index, '按钮已注入, 文件名:', fileName);
         });
         
         // 使用 MutationObserver 监听新增的文件项
@@ -237,7 +281,10 @@
             return;
         }
         
-        const dataIndex = item.getAttribute('data-index');
+        // 获取文件名
+        const nameEl = item.querySelector('.file-name-responsive');
+        const fileName = nameEl?.getAttribute('title') || nameEl?.innerText;
+        if (!fileName) return;
         
         const hoverMenu = item.querySelector('[class*="hidden group-hover:flex"]');
         if (!hoverMenu) return;
@@ -253,8 +300,8 @@
         javbusBtn.innerHTML = '<span>改名JavBus</span>';
         javbusBtn.addEventListener('click', function(e) {
             e.stopPropagation();
-            console.log('[115RenamePlus] 点击JavBus, dataIndex:', dataIndex);
-            renameFromHoverMenu(dataIndex, renameJavbus, 'javbus', 'video', true);
+            console.log('[115RenamePlus] 点击JavBus, 文件名:', fileName);
+            renameFromHoverMenuByFileName(fileName, renameJavbus, 'javbus', 'video', true);
         });
         
         // JavDB
@@ -263,8 +310,8 @@
         javdbBtn.innerHTML = '<span>改名JavDB</span>';
         javdbBtn.addEventListener('click', function(e) {
             e.stopPropagation();
-            console.log('[115RenamePlus] 点击JavDB, dataIndex:', dataIndex);
-            renameFromHoverMenu(dataIndex, renameJavdb, 'javdb', 'video', true);
+            console.log('[115RenamePlus] 点击JavDB, 文件名:', fileName);
+            renameFromHoverMenuByFileName(fileName, renameJavdb, 'javdb', 'video', true);
         });
         
         // FC2
@@ -273,8 +320,8 @@
         fc2Btn.innerHTML = '<span>改名FC2</span>';
         fc2Btn.addEventListener('click', function(e) {
             e.stopPropagation();
-            console.log('[115RenamePlus] 点击FC2, dataIndex:', dataIndex);
-            renameFromHoverMenu(dataIndex, renameFc2, 'fc2', 'video', true);
+            console.log('[115RenamePlus] 点击FC2, 文件名:', fileName);
+            renameFromHoverMenuByFileName(fileName, renameFc2, 'fc2', 'video', true);
         });
         
         btnContainer.appendChild(javbusBtn);
@@ -285,28 +332,41 @@
     }
     
     /**
-     * 从hover菜单触发改名
+     * 从hover菜单触发改名（通过文件名匹配，使用 API 获取正确的 fid）
      */
-    function renameFromHoverMenu(dataIndex, call, site, rntype, ifAddDate) {
-        const fileList = getFileListFromStorage();
-        if (!fileList) {
-            console.log('[115RenamePlus] 无法获取文件列表');
-            GM_notification(getDetails('', '无法获取文件数据'));
+    async function renameFromHoverMenuByFileName(fileName, call, site, rntype, ifAddDate) {
+        console.log('[115RenamePlus] 开始处理文件:', fileName);
+        
+        // 获取当前目录 cid
+        const currentCid = getCurrentCid();
+        console.log('[115RenamePlus] 当前目录 cid:', currentCid);
+        
+        // 通过 API 获取文件列表
+        const fileList = await fetchFileListByAPI(currentCid);
+        if (!fileList || fileList.length === 0) {
+            console.log('[115RenamePlus] API 返回文件列表为空');
+            GM_notification(getDetails(fileName, '无法获取文件数据'));
             return;
         }
         
-        const fileData = fileList[parseInt(dataIndex)];
+        console.log('[115RenamePlus] API 返回文件数量:', fileList.length);
+        
+        // 用文件名匹配找到对应的文件
+        const fileData = fileList.find(f => f.n === fileName);
         if (!fileData) {
-            console.log('[115RenamePlus] 未找到文件数据, index:', dataIndex);
+            console.log('[115RenamePlus] 未找到匹配的文件:', fileName);
+            GM_notification(getDetails(fileName, '未找到文件'));
             return;
         }
+        
+        console.log('[115RenamePlus] 找到文件:', fileData.n, 'fid:', fileData.cid);
         
         // 文件ID
         const fid = fileData.cid;
         // 文件名
         let file_name = fileData.n;
-        // 是否是文件夹
-        const isFolder = fileData.m === 0 || fileData.e === '';
+        // 是否是文件夹（m=0 表示文件夹，或者没有扩展名）
+        const isFolder = fileData.m === 0;
         
         // 后缀名
         let suffix;
@@ -318,7 +378,7 @@
             }
         }
         
-        console.log('[115RenamePlus] 处理文件:', file_name, 'fid:', fid, 'suffix:', suffix);
+        console.log('[115RenamePlus] 处理文件:', file_name, 'fid:', fid, 'suffix:', suffix, 'isFolder:', isFolder);
         
         if (fid && file_name) {
             let VideoCode;
