@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.0-beta.1
+// @version             0.12.0-beta.2
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/new-ui-adapt/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/new-ui-adapt/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名) - 新版UI适配测试版
@@ -28,7 +28,7 @@
     
     // 标记脚本已加载
     window.__115RenamePlusLoaded = true;
-    console.log('[115RenamePlus] 脚本已加载, 版本 0.12.0-beta.1 (新版UI测试)');
+    console.log('[115RenamePlus] 脚本已加载, 版本 0.12.0-beta.2 (新版UI测试)');
     
     // 新版UI按钮样式
     let rename_btn_class = "flex items-center gap-1.5 px-3 py-1.5 text-xs lg:text-sm xl:text-base rounded transition-colors whitespace-nowrap flex-shrink-0 text-white hover:bg-blue-500";
@@ -109,13 +109,20 @@
      * 新版UI按钮注入（注入到hover悬浮菜单）
      */
     function buttonIntervalNewUI() {
-        // 找到所有文件项
-        const fileItems = document.querySelectorAll('.file-list-item');
-        console.log('[115RenamePlus] 找到文件项:', fileItems.length);
+        // 只选择有 data-index 属性的外层文件项（排除内层嵌套元素）
+        const fileItems = document.querySelectorAll('.file-list-item[data-index]');
+        console.log('[115RenamePlus] 找到文件项(有data-index):', fileItems.length);
         
         fileItems.forEach((item, index) => {
             // 检查是否已注入按钮（用自定义属性标记）
             if (item.getAttribute('data-rename-buttons-injected') === 'true') {
+                return;
+            }
+            
+            // 获取 data-index
+            const dataIndex = item.getAttribute('data-index');
+            if (!dataIndex) {
+                console.log('[115RenamePlus] 文件项', index, '没有data-index');
                 return;
             }
             
@@ -200,11 +207,11 @@
             mutations.forEach(function(mutation) {
                 mutation.addedNodes.forEach(function(node) {
                     if (node.nodeType === 1) {
-                        // 检查是否是文件项或包含文件项
-                        if (node.classList?.contains('file-list-item')) {
+                        // 检查是否是文件项或包含文件项（只处理有 data-index 的）
+                        if (node.classList?.contains('file-list-item') && node.hasAttribute('data-index')) {
                             injectButtonsToFileItem(node);
                         }
-                        const nestedItems = node.querySelectorAll?.('.file-list-item');
+                        const nestedItems = node.querySelectorAll?.('.file-list-item[data-index]');
                         if (nestedItems) {
                             nestedItems.forEach(injectButtonsToFileItem);
                         }
@@ -221,9 +228,16 @@
      * 给单个文件项注入按钮
      */
     function injectButtonsToFileItem(item) {
+        // 只处理有 data-index 的元素
+        if (!item.hasAttribute('data-index')) {
+            return;
+        }
+        
         if (item.getAttribute('data-rename-buttons-injected') === 'true') {
             return;
         }
+        
+        const dataIndex = item.getAttribute('data-index');
         
         const hoverMenu = item.querySelector('[class*="hidden group-hover:flex"]');
         if (!hoverMenu) return;
@@ -239,7 +253,8 @@
         javbusBtn.innerHTML = '<span>改名JavBus</span>';
         javbusBtn.addEventListener('click', function(e) {
             e.stopPropagation();
-            renameFromHoverMenu(item.getAttribute('data-index'), renameJavbus, 'javbus', 'video', true);
+            console.log('[115RenamePlus] 点击JavBus, dataIndex:', dataIndex);
+            renameFromHoverMenu(dataIndex, renameJavbus, 'javbus', 'video', true);
         });
         
         // JavDB
@@ -248,7 +263,8 @@
         javdbBtn.innerHTML = '<span>改名JavDB</span>';
         javdbBtn.addEventListener('click', function(e) {
             e.stopPropagation();
-            renameFromHoverMenu(item.getAttribute('data-index'), renameJavdb, 'javdb', 'video', true);
+            console.log('[115RenamePlus] 点击JavDB, dataIndex:', dataIndex);
+            renameFromHoverMenu(dataIndex, renameJavdb, 'javdb', 'video', true);
         });
         
         // FC2
@@ -257,7 +273,8 @@
         fc2Btn.innerHTML = '<span>改名FC2</span>';
         fc2Btn.addEventListener('click', function(e) {
             e.stopPropagation();
-            renameFromHoverMenu(item.getAttribute('data-index'), renameFc2, 'fc2', 'video', true);
+            console.log('[115RenamePlus] 点击FC2, dataIndex:', dataIndex);
+            renameFromHoverMenu(dataIndex, renameFc2, 'fc2', 'video', true);
         });
         
         btnContainer.appendChild(javbusBtn);
