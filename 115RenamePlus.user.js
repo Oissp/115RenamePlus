@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.0-beta.7
+// @version             0.12.0-beta.8
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/new-ui-adapt/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/new-ui-adapt/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名) - 新版UI适配测试版
@@ -242,6 +242,23 @@
                 return;
             }
             
+            // 隐藏不需要的按钮：标签、备注、分享
+            const existingButtons = btnContainer.querySelectorAll('button');
+            existingButtons.forEach(btn => {
+                const text = btn.innerText?.trim() || btn.title;
+                if (text === '标签' || text === '备注' || text === '分享') {
+                    btn.style.display = 'none';
+                }
+            });
+            
+            // 找到"重命名"按钮
+            let renameBtn = null;
+            existingButtons.forEach(btn => {
+                if (btn.innerText?.trim() === '重命名' || btn.title === '重命名') {
+                    renameBtn = btn;
+                }
+            });
+            
             // 创建改名按钮
             const btnClass = 'flex items-center space-x-1 px-3 py-0.5 text-xs hover:bg-blue-50 text-gray-700 transition-colors cursor-pointer';
             
@@ -278,10 +295,20 @@
                 renameFromHoverMenuByFileName(fileName, renameFc2, 'fc2', 'video', true);
             });
             
-            // 在"更多"按钮后面插入（或直接添加到末尾）
-            btnContainer.appendChild(javbusBtn);
-            btnContainer.appendChild(javdbBtn);
-            btnContainer.appendChild(fc2Btn);
+            // 在"重命名"按钮后面插入（如果找不到就添加到末尾）
+            if (renameBtn && renameBtn.nextSibling) {
+                renameBtn.parentNode.insertBefore(javbusBtn, renameBtn.nextSibling);
+                renameBtn.parentNode.insertBefore(javdbBtn, javbusBtn.nextSibling);
+                renameBtn.parentNode.insertBefore(fc2Btn, javdbBtn.nextSibling);
+            } else if (renameBtn) {
+                renameBtn.parentNode.appendChild(javbusBtn);
+                renameBtn.parentNode.appendChild(javdbBtn);
+                renameBtn.parentNode.appendChild(fc2Btn);
+            } else {
+                btnContainer.appendChild(javbusBtn);
+                btnContainer.appendChild(javdbBtn);
+                btnContainer.appendChild(fc2Btn);
+            }
             
             // 标记已注入
             item.setAttribute('data-rename-buttons-injected', 'true');
@@ -350,6 +377,23 @@
         const btnContainer = hoverMenu.querySelector('[class*="bg-white rounded-md"]');
         if (!btnContainer) return;
         
+        // 隐藏不需要的按钮：标签、备注、分享
+        const buttons = btnContainer.querySelectorAll('button');
+        buttons.forEach(btn => {
+            const text = btn.innerText?.trim() || btn.title;
+            if (text === '标签' || text === '备注' || text === '分享') {
+                btn.style.display = 'none';
+            }
+        });
+        
+        // 找到"重命名"按钮
+        let renameBtn = null;
+        buttons.forEach(btn => {
+            if (btn.innerText?.trim() === '重命名' || btn.title === '重命名') {
+                renameBtn = btn;
+            }
+        });
+        
         const btnClass = 'flex items-center space-x-1 px-3 py-0.5 text-xs hover:bg-blue-50 text-gray-700 transition-colors cursor-pointer';
         
         // JavBus
@@ -382,9 +426,20 @@
             renameFromHoverMenuByFileName(fileName, renameFc2, 'fc2', 'video', true);
         });
         
-        btnContainer.appendChild(javbusBtn);
-        btnContainer.appendChild(javdbBtn);
-        btnContainer.appendChild(fc2Btn);
+        // 在"重命名"按钮后面插入（如果找不到就添加到末尾）
+        if (renameBtn && renameBtn.nextSibling) {
+            renameBtn.parentNode.insertBefore(javbusBtn, renameBtn.nextSibling);
+            renameBtn.parentNode.insertBefore(javdbBtn, javbusBtn.nextSibling);
+            renameBtn.parentNode.insertBefore(fc2Btn, javdbBtn.nextSibling);
+        } else if (renameBtn) {
+            renameBtn.parentNode.appendChild(javbusBtn);
+            renameBtn.parentNode.appendChild(javdbBtn);
+            renameBtn.parentNode.appendChild(fc2Btn);
+        } else {
+            btnContainer.appendChild(javbusBtn);
+            btnContainer.appendChild(javdbBtn);
+            btnContainer.appendChild(fc2Btn);
+        }
         
         item.setAttribute('data-rename-buttons-injected', 'true');
     }
