@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.0-beta.3
+// @version             0.12.0-beta.4
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/new-ui-adapt/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/new-ui-adapt/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名) - 新版UI适配测试版
@@ -28,7 +28,7 @@
     
     // 标记脚本已加载
     window.__115RenamePlusLoaded = true;
-    console.log('[115RenamePlus] 脚本已加载, 版本 0.12.0-beta.3 (新版UI测试)');
+    console.log('[115RenamePlus] 脚本已加载, 版本 0.12.0-beta.4 (新版UI测试)');
     
     // 新版UI按钮样式
     let rename_btn_class = "flex items-center gap-1.5 px-3 py-1.5 text-xs lg:text-sm xl:text-base rounded transition-colors whitespace-nowrap flex-shrink-0 text-white hover:bg-blue-500";
@@ -97,19 +97,33 @@
      */
     function fetchFileListByAPI(cid) {
         return new Promise((resolve, reject) => {
-            const apiUrl = 'https://webapi.115.com/files/getfiles?aid=1&cid=' + cid + '&o=user_ptime&asc=0&offset=0&limit=100&show_dir=1&source=&type=all&suffix=&star=0&fc_mix=0';
+            // 使用新版115实际使用的 API 端点
+            const apiUrl = 'https://webapi.115.com/files?aid=1&cid=' + cid + '&offset=0&limit=50&type=0&show_dir=1&fc_mix=1&natsort=1&format=json';
+            
+            console.log('[115RenamePlus] 请求 API:', apiUrl);
             
             GM_xmlhttpRequest({
                 method: 'GET',
                 url: apiUrl,
                 withCredentials: true,
                 onload: function(response) {
+                    console.log('[115RenamePlus] API 响应状态:', response.status);
+                    console.log('[115RenamePlus] API 响应内容:', response.responseText.substring(0, 500));
+                    
                     try {
                         const data = JSON.parse(response.responseText);
                         if (data.state && data.data) {
+                            console.log('[115RenamePlus] API 返回文件数:', data.data.length);
+                            // 打印前几个文件的信息用于调试
+                            data.data.slice(0, 3).forEach((f, i) => {
+                                console.log('[115RenamePlus] 文件' + i + ':', f.n, 'fid:', f.cid || f.fid);
+                            });
                             resolve(data.data);
                         } else {
-                            console.log('[115RenamePlus] API 返回数据异常:', data);
+                            console.log('[115RenamePlus] API 返回数据异常:');
+                            console.log('  - state:', data.state);
+                            console.log('  - error:', data.error);
+                            console.log('  - errcode:', data.errcode);
                             resolve(null);
                         }
                     } catch (e) {
