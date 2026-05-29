@@ -1586,8 +1586,8 @@
         if (!title) return title;
         
         // 1. 通用正则：清理 域名@ 格式（覆盖 95% 引流站）
-        // 匹配：开头 + 字母数字域名 + 常见 TLD + @
-        title = title.replace(/^\s*[0-9a-z]+\.(com|me|net|org|cc|io|biz|info|tv)@/i, "");
+        // 匹配：开头 + 字母数字域名 + 任意 TLD + @
+        title = title.replace(/^\s*[0-9a-z.-]+\.[a-z]{2,6}@/i, "");
         
         // 2. 特殊硬编码：无 @ 的前缀
         title = title
@@ -1691,21 +1691,41 @@
 			// - 无 PPV 格式：FC2-745325 / FC2-745325-C
 			// - 可带分段：FC2PPV-4679178-3 / FC2-PPV-4679178_4
 			// - 可带字幕标记：...-C（中文字幕语义，不作为分段）
-			// PPV 是可选的，匹配模式：FC2 后可选 PPV，然后是数字，可选分段，可选-C
-			let m = title.match(/(?:^|[^A-Z0-9])(FC2)(?:[\-_ ]{0,2}(PPV))?[\-_ ]{0,2}(\d{5,8})(?:[\-_ ]{0,2}([0-9]{1,2}|[A-Z]))?(?:[\-_ ]{0,2}(C))?(?=$|[^A-Z0-9])/);
-			if (m) {
-				let fc2 = m[1];
-				let num = m[3];
-				let partCandidate = m[4];
-				let cFlag = m[5];
-				t = "FC2-PPV-" + num;
-				// 如果存在分段且当前还没识别到 part，则记录下来（C 不是分段）
-				if (partCandidate && !part) {
-					part = partCandidate;
+			// - FC 简写格式：FC4871181（引流站常见，自动补全为 FC2-PPV）
+
+			// 先尝试匹配 FC + 5-8 位数字的简写格式（如 fc4871181）
+			if (!t) {
+				let mFcShort = title.match(/(?:^|[^A-Z0-9])FC[\-_ ]?(\d{5,8})(?:[\-_ ]?([0-9]{1,2}|[A-Z]))?(?:[\-_ ]?(C))?(?=$|[^A-Z0-9])/i);
+				if (mFcShort) {
+					let num = mFcShort[1];
+					let partCandidate = mFcShort[2];
+					let cFlag = mFcShort[3];
+					t = "FC2-PPV-" + num;
+					if (partCandidate && !part) {
+						part = partCandidate;
+					}
+					if (cFlag) t += "-" + cFlag;
+					console.log("找到番号(FC简写):" + t);
 				}
-				if (cFlag) t += "-" + cFlag;
-				console.log("找到番号:" + t);
-				// FC2 已命中就别再掉进后面的通用规则里乱匹配
+			}
+
+			// PPV 是可选的，匹配模式：FC2 后可选 PPV，然后是数字，可选分段，可选-C
+			if (!t) {
+				let m = title.match(/(?:^|[^A-Z0-9])(FC2)(?:[\-_ ]{0,2}(PPV))?[\-_ ]{0,2}(\d{5,8})(?:[\-_ ]{0,2}([0-9]{1,2}|[A-Z]))?(?:[\-_ ]{0,2}(C))?(?=$|[^A-Z0-9])/);
+				if (m) {
+					let fc2 = m[1];
+					let num = m[3];
+					let partCandidate = m[4];
+					let cFlag = m[5];
+					t = "FC2-PPV-" + num;
+					// 如果存在分段且当前还没识别到 part，则记录下来（C 不是分段）
+					if (partCandidate && !part) {
+						part = partCandidate;
+					}
+					if (cFlag) t += "-" + cFlag;
+					console.log("找到番号:" + t);
+					// FC2 已命中就别再掉进后面的通用规则里乱匹配
+				}
 			}
 
 		}else {
