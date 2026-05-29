@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name                115RenamePlus
+// @name                115RenamePlus (新版UI测试)
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.0-beta.10
+// @version             0.12.0-beta.11
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/new-ui-adapt/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/new-ui-adapt/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名) - 新版UI适配测试版
