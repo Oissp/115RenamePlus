@@ -218,32 +218,22 @@
      * 查找选中文件的顶部操作栏
      */
     function findSelectedFileActionBar() {
-        // 直接查找包含"已选中"文本的按钮容器（避免遍历全页面所有div）
-        // 115 新UI的操作栏通常包含"已选中 X 项" + 多个按钮
-        const actionBarContainers = document.querySelectorAll('button');
-        if (actionBarContainers.length === 0) return null;
+        // 查找包含"已选中"文本的元素，然后向上找操作栏容器
+        // 用 querySelectorAll 缩小范围：只查找可能包含"已选中"文本的元素
+        const candidates = document.querySelectorAll('span, div[role], button');
 
-        // 从按钮容器向上查找包含"已选中"文本的父元素
-        for (const btn of actionBarContainers) {
-            const parent = btn.closest('[class*="flex"]');
-            if (!parent) continue;
-            const text = (parent.innerText || '');
-            if (/已选中\s*\d+\s*项/.test(text) && text.length < 50) {
-                return parent;
-            }
-        }
-
-        // 兜底：从文件列表容器内查找
-        const fileList = document.querySelector('[class*="overflow-y-auto"]');
-        if (fileList) {
-            const text = (fileList.innerText || '');
-            if (/已选中\s*\d+\s*项/.test(text)) {
-                // 向上查找操作栏
-                let container = fileList;
-                for (let i = 0; i < 8; i++) {
+        for (const el of candidates) {
+            const text = (el.innerText || '');
+            // 找"已选中 X 项"这样的文本
+            if (/已选中\s*\d+\s*项/.test(text) && text.length < 30) {
+                // 向上查找包含多个按钮的容器
+                let container = el;
+                for (let i = 0; i < 5; i++) {
                     container = container.parentElement;
                     if (!container) break;
-                    if (/已选中\s*\d+\s*项/.test(container.innerText || '')) {
+
+                    const buttons = container.querySelectorAll('button');
+                    if (buttons.length > 5) {
                         return container;
                     }
                 }
@@ -262,7 +252,6 @@
         // 找到"重命名"按钮
         const renameBtn = findButtonByText(actionBar, '重命名');
         
-        // 按钮样式
         
         // 创建改名按钮
         const createButton = (text, color, icon) => {
@@ -400,7 +389,7 @@
      * 在悬浮菜单中注入按钮（备选方案）
      */
     function injectButtonsToHoverMenus() {
-        const fileItems = document.querySelectorAll('.file-list-item[data-index]');
+        const fileItems = document.querySelectorAll('.file-list-item');
         
         fileItems.forEach((item) => {
             if (item.getAttribute('data-rename-buttons-injected') === 'true') {
@@ -417,7 +406,6 @@
             const btnContainer = hoverMenu.querySelector('[class*="bg-white rounded-md"]');
             if (!btnContainer) return;
             
-            // 按钮样式
             
             // 图标
             const iconBus = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>';
@@ -529,11 +517,11 @@
             mutations.forEach(function(mutation) {
                 mutation.addedNodes.forEach(function(node) {
                     if (node.nodeType === 1) {
-                        // 检查是否是文件项或包含文件项（只处理有 data-index 的）
-                        if (node.classList?.contains('file-list-item') && node.hasAttribute('data-index')) {
+                        // 检查是否是文件项或包含文件项
+                        if (node.classList?.contains('file-list-item')) {
                             injectButtonsToFileItem(node);
                         }
-                        const nestedItems = node.querySelectorAll?.('.file-list-item[data-index]');
+                        const nestedItems = node.querySelectorAll?.('.file-list-item');
                         if (nestedItems) {
                             nestedItems.forEach(injectButtonsToFileItem);
                         }
@@ -549,11 +537,9 @@
      * 给单个文件项注入按钮
      */
     function injectButtonsToFileItem(item) {
-        // 只处理有 data-index 的元素
-        if (!item.hasAttribute('data-index')) {
-            return;
-        }
-        
+        // 只处理文件列表项
+        if (!item.classList?.contains('file-list-item')) return;
+
         if (item.getAttribute('data-rename-buttons-injected') === 'true') {
             return;
         }
