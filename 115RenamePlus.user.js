@@ -17,6 +17,7 @@
 // @require             https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js
 // @grant               GM_notification
 // @grant               GM_xmlhttpRequest
+// @grant               unsafeWindow
 // @connect             webapi.115.com
 // ==/UserScript==
 
@@ -28,7 +29,7 @@
     
     // 标记脚本已加载
     window.__115RenamePlusLoaded = true;
-    console.log('[115RenamePlus] 脚本已加载, 版本 0.12.0-beta.4 (新版UI测试)');
+    console.log('[115RenamePlus] 脚本已加载, 版本 0.12.0-beta.10 (新版UI测试)');
     
     // 添加全局调试函数
     window.debug115RenamePlus = async function(fileName) {
@@ -115,9 +116,27 @@
      * 检测是否为新版UI
      */
     function isNewUI() {
-        // 新版UI特征：有 file-list-item class，没有 iframe[rel='wangpan']
-        return document.querySelector('.file-list-item') !== null && 
+        // URL路径检测（更可靠）
+        if (/\/storage\/netdisk/.test(location.href)) return true;
+        // 兜底：DOM特征检测
+        return document.querySelector('.file-list-item') !== null &&
                document.querySelector('iframe[rel="wangpan"]') === null;
+    }
+
+    /**
+     * 从 React Fiber 中提取文件数据（新版UI专用，比 localStorage 更可靠）
+     */
+    function getReactFiberKey(el) {
+        return Object.keys(el).find(k => k.startsWith('__reactFiber'));
+    }
+
+    function getFileDataFromElement(el) {
+        if (!el) return null;
+        const fiberKey = getReactFiberKey(el);
+        if (fiberKey) {
+            return el[fiberKey]?.child?.memoizedProps?.file || null;
+        }
+        return null;
     }
 
     /**
@@ -145,10 +164,14 @@
             const apiUrl = 'https://webapi.115.com/files?aid=1&cid=' + cid + '&offset=0&limit=50&type=0&show_dir=1&fc_mix=1&natsort=1&format=json';
             
             console.log('[115RenamePlus] 请求 API:', apiUrl);
-            
+
             GM_xmlhttpRequest({
                 method: 'GET',
                 url: apiUrl,
+                headers: {
+                    'Origin': 'https://115.com',
+                    'Referer': 'https://115.com/'
+                },
                 withCredentials: true,
                 onload: function(response) {
                     console.log('[115RenamePlus] API 响应状态:', response.status);
@@ -315,26 +338,84 @@
      * 从顶部操作栏触发改名
      */
     async function renameFromTopBar(call, site, rntype, ifAddDate) {
-        // 获取所有选中的文件
-        const selectedItems = document.querySelectorAll('.file-list-item[data-index]');
+        // 多种方式获取选中文件项（覆盖不同状态的115页面）
+        const selectors = [
+            '.file-list-item input[type="checkbox"]:checked',
+            '.file-list-item [aria-checked="true"]',
+            '.file-list-item.checked',
+            '.file-list-item.selected'
+        ];
+        const selectedEls = new Set();
+        selectors.forEach(sel => {
+            document.querySelectorAll(sel).forEach(el => {
+                const item = el.closest?.('.file-list-item');
+                if (item) selectedEls.add(item);
+            });
+        });
+
         let processedCount = 0;
-        
-        for (const item of selectedItems) {
-            const checkbox = item.querySelector('input[type=checkbox]');
-            if (!checkbox || !checkbox.checked) continue;
-            
-            const nameEl = item.querySelector('.file-name-responsive');
-            const fileName = nameEl?.getAttribute('title') || nameEl?.innerText;
+
+        for (const item of selectedEls) {
+            // 优先使用 React Fiber 提取文件数据
+            const fileData = getFileDataFromElement(item);
+            const fileName = fileData?.n
+                || item.querySelector('.file-name-responsive')?.getAttribute('title')
+                || item.querySelector('.file-name-responsive')?.innerText;
             if (!fileName) continue;
-            
+
             console.log('[115RenamePlus] 处理选中文件:', fileName);
-            await renameFromHoverMenuByFileName(fileName, call, site, rntype, ifAddDate);
+            if (fileData?.fid) {
+                // 有 React Fiber 数据，直接用
+                await renameFromData(fileData, call, site, rntype, ifAddDate);
+            } else {
+                // 回退：通过文件名 API 查找
+                await renameFromHoverMenuByFileName(fileName, call, site, rntype, ifAddDate);
+            }
             processedCount++;
         }
-        
+
         if (processedCount === 0) {
             console.log('[115RenamePlus] 没有选中的文件');
             GM_notification(getDetails('', '请先选择文件'));
+        }
+    }
+
+    /**
+     * 直接从 React Fiber 数据触发改名（无需 API 调用，最快路径）
+     */
+    function renameFromData(fileData, call, site, rntype, ifAddDate) {
+        const fid = fileData.fid || fileData.cid;
+        let file_name = fileData.n;
+        const isFolder = fileData.ico === 0;
+
+        let suffix;
+        if (!isFolder && file_name) {
+            const lastDot = file_name.lastIndexOf('.');
+            if (lastDot !== -1) {
+                suffix = file_name.substring(lastDot);
+                file_name = file_name.substring(0, lastDot);
+            }
+        }
+
+        if (!fid || !file_name) return;
+
+        let VideoCode;
+        if (site === 'fc2') {
+            VideoCode = getVideoCode(file_name, 'fc2');
+        } else {
+            if (/FC2(?:[-_ ]?PPV)?/i.test(file_name)) {
+                VideoCode = getVideoCode(file_name, 'fc2');
+            } else {
+                VideoCode = getVideoCode(file_name);
+            }
+        }
+
+        if (VideoCode && VideoCode.fh) {
+            const ifChineseCaptions = VideoCode.fc2C ? true : checkifChineseCaptions(VideoCode.fh, file_name);
+            call(fid, rntype, VideoCode.fh, suffix, VideoCode.if4k, ifChineseCaptions, VideoCode.part, ifAddDate);
+        } else {
+            console.log('[115RenamePlus] 未识别到番号:', file_name);
+            GM_notification(getDetails(file_name, '未识别到番号'));
         }
     }
     
@@ -705,79 +786,48 @@
      * 新版UI改名方法
      */
     function renameNewUI(call, site, rntype, ifAddDate) {
-        // 从 localStorage 获取文件列表
-        const fileList = getFileListFromStorage();
-        if (!fileList) {
-            console.log('无法获取文件列表数据');
-            GM_notification(getDetails('', '无法获取文件数据'));
-            return;
-        }
-        
-        // 获取所有选中的文件项
         const selectedItems = document.querySelectorAll('.file-list-item');
-        
+        let hasProcessed = false;
+
         selectedItems.forEach(function(item) {
             const checkbox = item.querySelector('input[type=checkbox]');
             if (!checkbox || !checkbox.checked) return;
-            
-            // 获取 data-index
-            const dataIndex = item.getAttribute('data-index');
-            if (dataIndex === null) return;
-            
-            // 从 localStorage 文件列表中获取对应文件
-            const fileData = fileList[parseInt(dataIndex)];
-            if (!fileData) {
-                console.log('未找到文件数据, index:', dataIndex);
+
+            // 优先使用 React Fiber 提取文件数据
+            const fileData = getFileDataFromElement(item);
+            if (fileData && fileData.fid) {
+                renameFromData(fileData, call, site, rntype, ifAddDate);
+                hasProcessed = true;
                 return;
             }
-            
-            // 文件ID (cid)
-            const fid = fileData.cid;
-            // 文件名 (n)
-            let file_name = fileData.n;
-            // 文件类型：文件夹的 m=0, 文件有大小
-            const isFolder = fileData.m === 0 || fileData.e === '';
-            
-            // 后缀名
-            let suffix;
-            if (!isFolder) {
-                let lastIndexOf = file_name.lastIndexOf('.');
-                if (lastIndexOf !== -1) {
-                    suffix = file_name.substring(lastIndexOf, file_name.length);
-                    file_name = file_name.substring(0, lastIndexOf);
+
+            // 回退：从 localStorage 获取
+            const dataList = getFileListFromStorage();
+            if (dataList) {
+                const dataIndex = item.getAttribute('data-index');
+                if (dataIndex !== null) {
+                    const lf = dataList[parseInt(dataIndex)];
+                    if (lf) {
+                        renameFromData(lf, call, site, rntype, ifAddDate);
+                        hasProcessed = true;
+                        return;
+                    }
                 }
             }
-            
-            if (fid && file_name) {
-                let VideoCode;
-                // 正则匹配番号
-                if (site == "mgstage"){
-                    VideoCode = getVideoCode(file_name,"mgstage");
-                }else if (site == "fc2"){
-                    VideoCode = getVideoCode(file_name,"fc2");
-                }else{
-                    // 兜底：即使不是 fc2 按钮，也尝试识别 FC2 番号
-                    if (/FC2(?:[-_ ]?PPV)?/i.test(file_name)) {
-                        VideoCode = getVideoCode(file_name,"fc2");
-                    } else {
-                        VideoCode = getVideoCode(file_name);
-                    }
-                }
-                
-                if (VideoCode && VideoCode.fh) {
-                    if (rntype == "video"){
-                        // 校验是否是中文字幕
-                        let ifChineseCaptions = VideoCode.fc2C ? true : checkifChineseCaptions(VideoCode.fh, file_name);
-                        // 执行查询
-                        call(fid, rntype, VideoCode.fh, suffix, VideoCode.if4k, ifChineseCaptions, VideoCode.part, ifAddDate);
-                    } else if (rntype == "picture"){
-                        let picCaptions = getPicCaptions(VideoCode.fh, file_name);
-                        let ifChineseCaptions;
-                        call(fid, rntype, VideoCode.fh, suffix, VideoCode.if4k, ifChineseCaptions, picCaptions, ifAddDate);
-                    }
-                }
+
+            // 最终回退：通过文件名 + API
+            const nameEl = item.querySelector('.file-name-responsive');
+            const fileName = nameEl?.getAttribute('title') || nameEl?.innerText;
+            if (fileName) {
+                renameFromHoverMenuByFileName(fileName, call, site, rntype, ifAddDate);
+                hasProcessed = true;
             }
         });
+
+        if (!hasProcessed) {
+            console.log('无法获取文件数据');
+            GM_notification(getDetails('', '无法获取文件数据'));
+        }
     }
 
     /**
@@ -1543,6 +1593,8 @@
             url: "https://webapi.115.com/files/edit",
             headers: {
                 "Content-Type": "application/x-www-form-urlencoded",
+                "Origin": "https://115.com",
+                "Referer": "https://115.com/"
             },
             data: "fid=" + id + "&file_name=" + encodeURIComponent(file_name),
             withCredentials: true,
@@ -1556,7 +1608,14 @@
                         GM_notification(getDetails(fh, "修改成功"));
                         console.log("修改文件名称,fh:" + fh, "name:" + file_name);
                         // 刷新文件列表
-                        setTimeout(function() { location.reload(); }, 1000);
+                        setTimeout(function() {
+                            // 优先尝试115内部刷新函数
+                            if (typeof unsafeWindow.refreshNetdiskFileList === 'function') {
+                                unsafeWindow.refreshNetdiskFileList();
+                            } else {
+                                location.reload();
+                            }
+                        }, 1000);
                     }
                 } catch (e) {
                     GM_notification(getDetails(fh, "修改失败"));
@@ -1578,22 +1637,25 @@
      */
 
     /**
-     * 清理引流站域名前缀（如 489155.com@ / hhd800.com@ / 4k2.me@）
+     * 清理引流站域名前缀（如 489155.com@ / hhd800.com@ / www.98T.la@ / 1start00558@）
      * @param title 原始文件名
      * @returns 清理后的文件名
      */
     function cleanDomainPrefix(title) {
         if (!title) return title;
-        
-        // 1. 通用正则：清理 域名@ 格式（覆盖 95% 引流站）
-        // 匹配：开头 + 字母数字域名 + 任意 TLD + @
-        title = title.replace(/^\s*[0-9a-z.-]+\.[a-z]{2,6}@/i, "");
-        
-        // 2. 特殊硬编码：无 @ 的前缀
+
+        // 第1层：完整URL + @ 格式（覆盖 https://www.98T.la@ 等）
+        title = title.replace(/(?:https?:\/\/)?(?:www\.)?[a-z0-9][a-z0-9.-]*\.[a-z]{2,}(?:\.[a-z]{2,})?@/gi, '');
+        // 第2层：域名@ 格式（覆盖 489155.com@ / hhd800.com@ 等）
+        title = title.replace(/^\s*[a-z0-9.-]+\.[a-z]{2,6}@/i, '');
+        // 第3层：任意数字+字母@ 格式（覆盖 1start00558@ / javbus@ 等）
+        title = title.replace(/^\s*[a-z0-9]+@/i, '');
+
+        // 特殊硬编码：无 @ 的前缀
         title = title
-            .replace(/^BIG2048\.COM\s*/i, "")
-            .replace(/^SIS001\s*/i, "");
-        
+            .replace(/^BIG2048\.COM\s*/i, '')
+            .replace(/^SIS001\s*/i, '');
+
         return title;
     }
 
