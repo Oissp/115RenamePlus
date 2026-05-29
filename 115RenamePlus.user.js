@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.10.9
+// @version             0.10.10
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -125,9 +125,6 @@
                             VideoCode = getVideoCode(file_name);
                         }
                     }
-                    if (false) {
-                        VideoCode = getVideoCode(file_name);
-                    }
                     if (VideoCode.fh) {
 						if ( rntype=="video" ){
 							// 校验是否是中文字幕
@@ -150,81 +147,6 @@
 		// if(!Main.ReInstance({type:'', star:'', is_q: '', is_share:''})){window.location.reload();}
 		// if(list){window.location.reload();}
     }
-    /**
-     * 通过avmoo搜索+javbus详情页进行查询
-	 * @param fid               文件id
-	 * @param rntype      		改名类型 video picture
-	 * @param fh                番号
-	 * @param suffix            后缀
-	 * @param ifChineseCaptions   是否有中文字幕
-	 * @param part              视频分段，图片冗余文件名 
-	 * @param ifAddDate              是否添加时间 
-	 * @param searchUrl               请求地址
-     */
-    function renameJavbusDetail(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate) {
-        requestJavbusDetail(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, javbusSearch);
-    }
-    function requestJavbusDetail(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, searchUrl) {
-        let title;
-        let date;
-        let moviePage = javbusBase + fh;
-        let actors = [];
-		// 获取javbus详情页内信息
-		let getJavbusDetail = new Promise((resolve, reject) => {
-		    console.log("处理详情页：" + moviePage);
-		    if(moviePage){
-		GM_xmlhttpRequest({
-		            method: "GET",
-		            url: moviePage,
-		            withCredentials: true,
-		            onload: xhr => {
-		                let response = $(xhr.responseText);
-		                // 标题
-		                title = response
-		                    .find("h3")
-		                    .html();
-		                title = title.slice(fh.length+1);
-		                // 时间
-		                date = response
-		                        .find("p:nth-of-type(2)")
-		                        .html();
-		                date = date.match(/\d{4}\-\d{2}\-\d{2}/);	                    
-		                // 演员们
-		                let actorTags = response.find("div.star-name").each(function(){
-		                    actors.push($(this).find("a").attr("title"));
-		                });
-		                resolve();
-		            }
-		        });
-		    }else{
-		        resolve();
-		    }
-		});
-        function setName(){
-            return new Promise((resolve, reject) => {
-                if(moviePage){
-                    let actor = actors.toString();
-                    // 构建新名称
-                    let newName = buildNewName(fh, rntype, suffix, if4k, ifChineseCaptions, part, title, date, actor, ifAddDate);
-                    if (newName) {
-                        // 修改名称
-                        send_115(fid, newName, fh);
-                    }
-                    resolve(newName);
-                }else if (searchUrl !== javbusUncensoredSearch) {
-                    // 进行无码重查询
-                    requestJavbus(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, javbusUncensoredSearch);
-                }else {
-                    resolve("没有查到结果");
-                }
-            });
-        }
-        getJavbusDetail.then(setName,setName)
-            .then(function(result){
-                console.log("改名结束，" + result);
-            });
-    }
-	
     /**
      * 通过javbus进行查询
 	 * 请求javbus,并请求115进行改名
@@ -942,12 +864,11 @@
         if (/FC2[-_ ]?(?:PPV[-_ ]?)?\d{5,8}[-_ ]C$/i.test(title)) {
             fc2CFlag = true;
             title = title.replace(/[-_ ]C$/i, "");
-            console.log("识别 FC2-C 字幕标记，暂移除");
         }
         // 通用格式：XXXXX-XX-C（非 FC2 的番号）
         else if (/^[A-Z]{2,10}[-_ ]?\d{2,6}[-_ ]C$/i.test(title)) {
+            fc2CFlag = true;
             title = title.replace(/[-_ ]C$/i, "");
-            console.log("识别通用-C 字幕标记，暂移除");
         }
         
         // 传统格式：CD1, HD2, FHD3, HHB4 等（只在文件名中找，不要从整段 title 末尾取，避免误把日期 03-19 当分段）
@@ -1157,24 +1078,5 @@
         }
     }
 
-    /**
-     * 从可能包含额外信息的番号中提取标准格式的番号
-     * 例如：从 YRNKMTNDVAJ-655 中提取 DVAJ-655
-     * @param fullCode 完整的番号字符串
-     * @return 标准格式的番号
-     */
-    function extractStandardCode(fullCode) {
-        if (!fullCode) return null;
-        
-        // 尝试匹配标准格式：字母+数字，如 ABC-123 或 ABC123
-        // 匹配模式：2-6个字母，可选连字符，3-5个数字
-        let standardMatch = fullCode.match(/[A-Z]{2,6}-?\d{3,5}/i);
-        if (standardMatch) {
-            return standardMatch[0].replace(/-/g, '-'); // 确保格式一致
-        }
-        
-        // 如果没有找到标准格式，返回null
-        return null;
-    }
 
 })();

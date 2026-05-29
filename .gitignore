@@ -1,3 +1,6 @@
 .DS_Store
 
 .alma-snapshots/
+# Claude Code
+CLAUDE.md
+.claude/
