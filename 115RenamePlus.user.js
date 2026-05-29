@@ -29,7 +29,7 @@
     
     // 标记脚本已加载
     window.__115RenamePlusLoaded = true;
-    console.log('[115RenamePlus] 脚本已加载, 版本 0.12.0-beta.10 (新版UI测试)');
+    console.log('[115RenamePlus] 脚本已加载, 版本 0.12.0-beta.11 (新版UI测试)');
     
     // 添加全局调试函数
     window.debug115RenamePlus = async function(fileName) {
@@ -75,30 +75,15 @@
     };
     console.log('[115RenamePlus] 调试函数已挂载: window.debug115RenamePlus("文件名")');
     
-    // 新版UI按钮样式
+    // 顶部操作栏按钮样式
     let rename_btn_class = "flex items-center gap-1.5 px-3 py-1.5 text-xs lg:text-sm xl:text-base rounded transition-colors whitespace-nowrap flex-shrink-0 text-gray-700 hover:bg-blue-500 hover:text-white";
-    
-    // 按钮 HTML（新版UI适配）
-    let rename_buttons = `
-            <button id="rename_video_javbus" class="${rename_btn_class}" title="视频改名javbus">
-                <span>改名JavBus</span>
-            </button>
-            <button id="rename_video_javdb" class="${rename_btn_class}" title="视频改名javdb">
-                <span>改名JavDB</span>
-            </button>
-            <button id="rename_video_FC2" class="${rename_btn_class}" title="视频改名FC2">
-                <span>改名FC2</span>
-            </button>
-        `;
-    
-    // 记录是否已添加按钮
-    let buttonsAdded = false;
+    // 悬浮菜单按钮样式
+    let hover_btn_class = "flex items-center space-x-1 px-3 py-0.5 text-xs hover:bg-blue-50 text-gray-700 transition-colors cursor-pointer";
     
     /**
      * 添加按钮的定时任务
      */
     let interval = setInterval(buttonInterval, 1000);
-    console.log('[115RenamePlus] 定时器已启动');
 
     // javbus
     let javbusBase = "https://www.javbus.com/";
@@ -109,8 +94,6 @@
 
     let javdbBase = "https://javdb.com";
     let javdbSearch = javdbBase + "/search?q=";
-
-    'use strict';
 
     /**
      * 检测是否为新版UI
@@ -163,8 +146,6 @@
             // 使用新版115实际使用的 API 端点
             const apiUrl = 'https://webapi.115.com/files?aid=1&cid=' + cid + '&offset=0&limit=50&type=0&show_dir=1&fc_mix=1&natsort=1&format=json';
             
-            console.log('[115RenamePlus] 请求 API:', apiUrl);
-
             GM_xmlhttpRequest({
                 method: 'GET',
                 url: apiUrl,
@@ -174,23 +155,12 @@
                 },
                 withCredentials: true,
                 onload: function(response) {
-                    console.log('[115RenamePlus] API 响应状态:', response.status);
-                    console.log('[115RenamePlus] API 响应内容:', response.responseText.substring(0, 500));
-                    
                     try {
                         const data = JSON.parse(response.responseText);
                         if (data.state && data.data) {
-                            console.log('[115RenamePlus] API 返回文件数:', data.data.length);
-                            // 打印前几个文件的信息用于调试
-                            data.data.slice(0, 3).forEach((f, i) => {
-                                console.log('[115RenamePlus] 文件' + i + ':', f.n, 'fid:', f.cid || f.fid);
-                            });
                             resolve(data.data);
                         } else {
-                            console.log('[115RenamePlus] API 返回数据异常:');
-                            console.log('  - state:', data.state);
-                            console.log('  - error:', data.error);
-                            console.log('  - errcode:', data.errcode);
+                            console.log('[115RenamePlus] API 返回数据异常:', data);
                             resolve(null);
                         }
                     } catch (e) {
@@ -236,7 +206,6 @@
         const actionBar = findSelectedFileActionBar();
         
         if (actionBar && !actionBar.getAttribute('data-rename-buttons-injected')) {
-            console.log('[115RenamePlus] 找到顶部操作栏，开始注入按钮');
             injectButtonsToActionBar(actionBar);
             actionBar.setAttribute('data-rename-buttons-injected', 'true');
         }
@@ -249,21 +218,32 @@
      * 查找选中文件的顶部操作栏
      */
     function findSelectedFileActionBar() {
-        // 查找包含"已选中"文本的元素，然后向上找操作栏容器
-        const allDivs = document.querySelectorAll('div');
-        
-        for (const div of allDivs) {
-            const text = (div.innerText || '');
-            // 找"已选中 X 项"这样的文本
-            if (/已选中\s*\d+\s*项/.test(text) && text.length < 30) {
-                // 向上查找包含多个按钮的容器
-                let container = div;
-                for (let i = 0; i < 5; i++) {
+        // 直接查找包含"已选中"文本的按钮容器（避免遍历全页面所有div）
+        // 115 新UI的操作栏通常包含"已选中 X 项" + 多个按钮
+        const actionBarContainers = document.querySelectorAll('button');
+        if (actionBarContainers.length === 0) return null;
+
+        // 从按钮容器向上查找包含"已选中"文本的父元素
+        for (const btn of actionBarContainers) {
+            const parent = btn.closest('[class*="flex"]');
+            if (!parent) continue;
+            const text = (parent.innerText || '');
+            if (/已选中\s*\d+\s*项/.test(text) && text.length < 50) {
+                return parent;
+            }
+        }
+
+        // 兜底：从文件列表容器内查找
+        const fileList = document.querySelector('[class*="overflow-y-auto"]');
+        if (fileList) {
+            const text = (fileList.innerText || '');
+            if (/已选中\s*\d+\s*项/.test(text)) {
+                // 向上查找操作栏
+                let container = fileList;
+                for (let i = 0; i < 8; i++) {
                     container = container.parentElement;
                     if (!container) break;
-                    
-                    const buttons = container.querySelectorAll('button');
-                    if (buttons.length > 5) {
+                    if (/已选中\s*\d+\s*项/.test(container.innerText || '')) {
                         return container;
                     }
                 }
@@ -283,12 +263,11 @@
         const renameBtn = findButtonByText(actionBar, '重命名');
         
         // 按钮样式
-        const btnClass = 'flex items-center gap-1.5 px-3 py-1.5 text-xs lg:text-sm xl:text-base rounded transition-colors whitespace-nowrap flex-shrink-0 text-gray-700 hover:bg-blue-500 hover:text-white';
         
         // 创建改名按钮
         const createButton = (text, color, icon) => {
             const btn = document.createElement('button');
-            btn.className = btnClass;
+            btn.className = rename_btn_class;
             btn.innerHTML = `${icon}<span>${text}</span>`;
             btn.setAttribute('data-rename-btn', 'true');
             return btn;
@@ -331,7 +310,6 @@
             actionBar.appendChild(fc2Btn);
         }
         
-        console.log('[115RenamePlus] 按钮已注入到顶部操作栏');
     }
     
     /**
@@ -363,7 +341,6 @@
                 || item.querySelector('.file-name-responsive')?.innerText;
             if (!fileName) continue;
 
-            console.log('[115RenamePlus] 处理选中文件:', fileName);
             if (fileData?.fid) {
                 // 有 React Fiber 数据，直接用
                 await renameFromData(fileData, call, site, rntype, ifAddDate);
@@ -441,29 +418,15 @@
             if (!btnContainer) return;
             
             // 按钮样式
-            const btnClass = 'flex items-center space-x-1 px-3 py-0.5 text-xs hover:bg-blue-50 text-gray-700 transition-colors cursor-pointer';
             
             // 图标
             const iconBus = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>';
             const iconDb = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h6"/></svg>';
             const iconFc2 = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><polygon points="23 7 16 12 23 17"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>';
             
-            // 创建按钮函数
-            const createBtn = (text, icon, action) => {
-                const btn = document.createElement('button');
-                btn.className = btnClass;
-                btn.innerHTML = icon + '<span style="font-size:14px;">' + text + '</span>';
-                btn.setAttribute('data-action', action);
-                btn.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    renameFromHoverMenuByFileName(fileName, arguments.callee.callSite.call, arguments.callee.callSite.site, 'video', true);
-                });
-                return btn;
-            };
-            
             // JavBus 按钮
             const javbusBtn = document.createElement('button');
-            javbusBtn.className = btnClass;
+            javbusBtn.className = hover_btn_class;
             javbusBtn.innerHTML = iconBus + '<span style="font-size:14px;">JavBus</span>';
             javbusBtn.title = '通过JavBus改名';
             javbusBtn.addEventListener('click', function(e) {
@@ -473,7 +436,7 @@
             
             // JavDB 按钮
             const javdbBtn = document.createElement('button');
-            javdbBtn.className = btnClass;
+            javdbBtn.className = hover_btn_class;
             javdbBtn.innerHTML = iconDb + '<span style="font-size:14px;">JavDB</span>';
             javdbBtn.title = '通过JavDB改名';
             javdbBtn.addEventListener('click', function(e) {
@@ -483,7 +446,7 @@
             
             // FC2 按钮
             const fc2Btn = document.createElement('button');
-            fc2Btn.className = btnClass;
+            fc2Btn.className = hover_btn_class;
             fc2Btn.innerHTML = iconFc2 + '<span style="font-size:14px;">FC2</span>';
             fc2Btn.title = '通过FC2改名';
             fc2Btn.addEventListener('click', function(e) {
@@ -559,7 +522,6 @@
     function setupMutationObserver() {
         const fileListContainer = document.querySelector('[class*="overflow-y-auto"]');
         if (!fileListContainer) {
-            console.log('[115RenamePlus] 未找到文件列表容器，稍后重试');
             return;
         }
         
@@ -581,7 +543,6 @@
         });
         
         observer.observe(fileListContainer, { childList: true, subtree: true });
-        console.log('[115RenamePlus] MutationObserver 已设置');
     }
     
     /**
@@ -614,11 +575,10 @@
         // 找到"重命名"按钮
         const renameBtn = findButtonByText(btnContainer, '重命名');
         
-        const btnClass = 'flex items-center space-x-1 px-3 py-0.5 text-xs hover:bg-blue-50 text-gray-700 transition-colors cursor-pointer';
         
         // JavBus 按钮 - 橙色图标
         const javbusBtn = document.createElement('button');
-        javbusBtn.className = btnClass;
+        javbusBtn.className = hover_btn_class;
         javbusBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span style="font-size:14px;">JavBus</span>';
         javbusBtn.title = '通过JavBus改名';
         javbusBtn.addEventListener('click', function(e) {
@@ -628,7 +588,7 @@
         
         // JavDB 按钮 - 蓝色图标
         const javdbBtn = document.createElement('button');
-        javdbBtn.className = btnClass;
+        javdbBtn.className = hover_btn_class;
         javdbBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h6M9 15h3"/></svg><span style="font-size:14px;">JavDB</span>';
         javdbBtn.title = '通过JavDB改名';
         javdbBtn.addEventListener('click', function(e) {
@@ -638,7 +598,7 @@
         
         // FC2 按钮 - 紫色图标
         const fc2Btn = document.createElement('button');
-        fc2Btn.className = btnClass;
+        fc2Btn.className = hover_btn_class;
         fc2Btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg><span style="font-size:14px;">FC2</span>';
         fc2Btn.title = '通过FC2改名';
         fc2Btn.addEventListener('click', function(e) {
@@ -658,49 +618,34 @@
      * 从hover菜单触发改名（通过文件名匹配，使用 API 获取正确的 fid）
      */
     async function renameFromHoverMenuByFileName(fileName, call, site, rntype, ifAddDate) {
-        console.log('[115RenamePlus] ========== 开始改名流程 ==========');
-        console.log('[115RenamePlus] 目标文件名:', fileName);
-        
+        console.log('[115RenamePlus] 改名: ' + fileName);
+
         // 获取当前目录 cid
         const currentCid = getCurrentCid();
-        console.log('[115RenamePlus] 当前目录 cid:', currentCid);
-        
+
         // 通过 API 获取文件列表
         const fileList = await fetchFileListByAPI(currentCid);
         if (!fileList || fileList.length === 0) {
-            console.log('[115RenamePlus] ❌ API 返回文件列表为空');
             GM_notification(getDetails(fileName, '无法获取文件数据'));
             return;
         }
-        
-        console.log('[115RenamePlus] API 返回文件数量:', fileList.length);
-        
-        // 打印所有文件的 cid 和 名称
-        console.log('[115RenamePlus] 文件列表:');
-        fileList.forEach((f, i) => {
-            console.log('  [' + i + '] n=' + f.n + ', cid=' + f.cid + ', fid=' + f.fid + ', ico=' + f.ico);
-        });
-        
+
         // 用文件名匹配找到对应的文件
         const fileData = fileList.find(f => f.n === fileName);
         if (!fileData) {
-            console.log('[115RenamePlus] ❌ 未找到匹配的文件:', fileName);
+            console.log('[115RenamePlus] 未找到匹配文件:', fileName);
             GM_notification(getDetails(fileName, '未找到文件'));
             return;
         }
-        
-        console.log('[115RenamePlus] ✅ 找到目标文件!');
-        console.log('[115RenamePlus] 文件完整数据:', JSON.stringify(fileData, null, 2));
-        
+
         // 文件ID - 注意：文件用 fid 或 cid，文件夹用 cid
         const fid = fileData.fid || fileData.cid;
-        console.log('[115RenamePlus] 使用 fid:', fid);
-        
+
         // 文件名
         let file_name = fileData.n;
         // 是否是文件夹（ico=0 表示文件夹）
         const isFolder = fileData.ico === 0;
-        
+
         // 后缀名
         let suffix;
         if (!isFolder) {
@@ -710,9 +655,7 @@
                 file_name = file_name.substring(0, lastDot);
             }
         }
-        
-        console.log('[115RenamePlus] 处理文件:', file_name, 'fid:', fid, 'suffix:', suffix, 'isFolder:', isFolder);
-        
+
         if (fid && file_name) {
             let VideoCode;
             if (site === 'fc2') {
@@ -877,9 +820,6 @@
                             VideoCode = getVideoCode(file_name);
                         }
                     }
-                    if (false) {
-                        VideoCode = getVideoCode(file_name);
-                    }
                     if (VideoCode.fh) {
 						if ( rntype=="video" ){
 							// 校验是否是中文字幕
@@ -900,81 +840,6 @@
                 }
             });
     }
-    /**
-     * 通过avmoo搜索+javbus详情页进行查询
-	 * @param fid               文件id
-	 * @param rntype      		改名类型 video picture
-	 * @param fh                番号
-	 * @param suffix            后缀
-	 * @param ifChineseCaptions   是否有中文字幕
-	 * @param part              视频分段，图片冗余文件名 
-	 * @param ifAddDate              是否添加时间 
-	 * @param searchUrl               请求地址
-     */
-    function renameJavbusDetail(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate) {
-        requestJavbusDetail(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, javbusSearch);
-    }
-    function requestJavbusDetail(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, searchUrl) {
-        let title;
-        let date;
-        let moviePage = javbusBase + fh;
-        let actors = [];
-		// 获取javbus详情页内信息
-		let getJavbusDetail = new Promise((resolve, reject) => {
-		    console.log("处理详情页：" + moviePage);
-		    if(moviePage){
-		GM_xmlhttpRequest({
-		            method: "GET",
-		            url: moviePage,
-		            withCredentials: true,
-		            onload: xhr => {
-		                let response = $(xhr.responseText);
-		                // 标题
-		                title = response
-		                    .find("h3")
-		                    .html();
-		                title = title.slice(fh.length+1);
-		                // 时间
-		                date = response
-		                        .find("p:nth-of-type(2)")
-		                        .html();
-		                date = date.match(/\d{4}\-\d{2}\-\d{2}/);	                    
-		                // 演员们
-		                let actorTags = response.find("div.star-name").each(function(){
-		                    actors.push($(this).find("a").attr("title"));
-		                });
-		                resolve();
-		            }
-		        });
-		    }else{
-		        resolve();
-		    }
-		});
-        function setName(){
-            return new Promise((resolve, reject) => {
-                if(moviePage){
-                    let actor = actors.toString();
-                    // 构建新名称
-                    let newName = buildNewName(fh, rntype, suffix, if4k, ifChineseCaptions, part, title, date, actor, ifAddDate);
-                    if (newName) {
-                        // 修改名称
-                        send_115(fid, newName, fh);
-                    }
-                    resolve(newName);
-                }else if (searchUrl !== javbusUncensoredSearch) {
-                    // 进行无码重查询
-                    requestJavbus(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, javbusUncensoredSearch);
-                }else {
-                    resolve("没有查到结果");
-                }
-            });
-        }
-        getJavbusDetail.then(setName,setName)
-            .then(function(result){
-                console.log("改名结束，" + result);
-            });
-    }
-	
     /**
      * 通过javbus进行查询
 	 * 请求javbus,并请求115进行改名
@@ -1630,13 +1495,6 @@
     }
 
     /**
-     * 通知参数
-     * @param text 内容
-     * @param title 标题
-     * @returns {{text: *, title: *, timeout: number}}
-     */
-
-    /**
      * 清理引流站域名前缀（如 489155.com@ / hhd800.com@ / www.98T.la@ / 1start00558@）
      * @param title 原始文件名
      * @returns 清理后的文件名
@@ -1918,26 +1776,6 @@
                 fc2C: fc2CFlag || undefined,
             };
         }
-    }
-
-    /**
-     * 从可能包含额外信息的番号中提取标准格式的番号
-     * 例如：从 YRNKMTNDVAJ-655 中提取 DVAJ-655
-     * @param fullCode 完整的番号字符串
-     * @return 标准格式的番号
-     */
-    function extractStandardCode(fullCode) {
-        if (!fullCode) return null;
-        
-        // 尝试匹配标准格式：字母+数字，如 ABC-123 或 ABC123
-        // 匹配模式：2-6个字母，可选连字符，3-5个数字
-        let standardMatch = fullCode.match(/[A-Z]{2,6}-?\d{3,5}/i);
-        if (standardMatch) {
-            return standardMatch[0].replace(/-/g, '-'); // 确保格式一致
-        }
-        
-        // 如果没有找到标准格式，返回null
-        return null;
     }
 
 })();
