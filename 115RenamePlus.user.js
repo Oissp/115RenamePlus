@@ -204,12 +204,17 @@
     function buttonIntervalNewUI() {
         // 查找选中文件的顶部操作栏
         const actionBar = findSelectedFileActionBar();
-        
-        if (actionBar && !actionBar.getAttribute('data-rename-buttons-injected')) {
+
+        if (!actionBar) {
+            return; // 还没选文件或操作栏没找到，继续轮询
+        }
+
+        if (!actionBar.getAttribute('data-rename-buttons-injected')) {
+            console.log('[115RenamePlus] 找到操作栏，注入按钮');
             injectButtonsToActionBar(actionBar);
             actionBar.setAttribute('data-rename-buttons-injected', 'true');
         }
-        
+
         // 同时处理悬浮菜单（备选方案）
         injectButtonsToHoverMenus();
     }
@@ -218,16 +223,15 @@
      * 查找选中文件的顶部操作栏
      */
     function findSelectedFileActionBar() {
-        // 查找包含"已选中"文本的元素，然后向上找操作栏容器
-        // 用 querySelectorAll 缩小范围：只查找可能包含"已选中"文本的元素
-        const candidates = document.querySelectorAll('span, div[role], button');
+        // 遍历页面上所有 div，查找包含"已选中 X 项"文本的元素的父级操作栏容器
+        const allDivs = document.querySelectorAll('div');
 
-        for (const el of candidates) {
-            const text = (el.innerText || '');
+        for (const div of allDivs) {
+            const text = (div.innerText || '');
             // 找"已选中 X 项"这样的文本
             if (/已选中\s*\d+\s*项/.test(text) && text.length < 30) {
                 // 向上查找包含多个按钮的容器
-                let container = el;
+                let container = div;
                 for (let i = 0; i < 5; i++) {
                     container = container.parentElement;
                     if (!container) break;
@@ -405,6 +409,7 @@
             
             const btnContainer = hoverMenu.querySelector('[class*="bg-white rounded-md"]');
             if (!btnContainer) return;
+            console.log("[115RenamePlus] 悬浮菜单注入按钮: " + fileName);
             
             
             // 图标
