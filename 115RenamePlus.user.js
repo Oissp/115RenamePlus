@@ -76,7 +76,7 @@
     console.log('[115RenamePlus] 调试函数已挂载: window.debug115RenamePlus("文件名")');
     
     // 新版UI按钮样式
-    let rename_btn_class = "flex items-center gap-1.5 px-3 py-1.5 text-xs lg:text-sm xl:text-base rounded transition-colors whitespace-nowrap flex-shrink-0 text-white hover:bg-blue-500";
+    let rename_btn_class = "flex items-center gap-1.5 px-3 py-1.5 text-xs lg:text-sm xl:text-base rounded transition-colors whitespace-nowrap flex-shrink-0 text-gray-700 hover:bg-blue-500 hover:text-white";
     
     // 按钮 HTML（新版UI适配）
     let rename_buttons = `
@@ -283,7 +283,7 @@
         const renameBtn = findButtonByText(actionBar, '重命名');
         
         // 按钮样式
-        const btnClass = 'flex items-center gap-1.5 px-3 py-1.5 text-xs lg:text-sm xl:text-base rounded transition-colors whitespace-nowrap flex-shrink-0 text-white hover:bg-blue-500';
+        const btnClass = 'flex items-center gap-1.5 px-3 py-1.5 text-xs lg:text-sm xl:text-base rounded transition-colors whitespace-nowrap flex-shrink-0 text-gray-700 hover:bg-blue-500 hover:text-white';
         
         // 创建改名按钮
         const createButton = (text, color, icon) => {
