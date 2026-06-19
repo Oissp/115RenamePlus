@@ -27,58 +27,15 @@
 (function () {
     'use strict';
     
-    // 标记脚本已加载
-    window.__115RenamePlusLoaded = true;
-    console.log('[115RenamePlus] 脚本已加载, 版本 0.12.0-beta.11 (新版UI测试)');
-    
-    // 添加全局调试函数
-    window.debug115RenamePlus = async function(fileName) {
-        const cid = new URL(window.location.href).searchParams.get('cid') || '0';
-        const apiUrl = 'https://webapi.115.com/files?aid=1&cid=' + cid + '&offset=0&limit=50&type=0&show_dir=1&fc_mix=1&natsort=1&format=json';
-        
-        console.log('[Debug] 请求 API:', apiUrl);
-        
-        return new Promise((resolve) => {
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: apiUrl,
-                withCredentials: true,
-                onload: function(response) {
-                    console.log('[Debug] API 响应:', response.responseText.substring(0, 1000));
-                    try {
-                        const data = JSON.parse(response.responseText);
-                        console.log('[Debug] state:', data.state);
-                        console.log('[Debug] 文件数量:', data.data?.length);
-                        
-                        if (data.data) {
-                            data.data.forEach((f, i) => {
-                                console.log('[Debug] 文件' + i + ':', f.n, 'cid:', f.cid, 'fid:', f.fid);
-                            });
-                            
-                            if (fileName) {
-                                const found = data.data.find(f => f.n === fileName);
-                                console.log('[Debug] 查找文件:', fileName, '结果:', found);
-                            }
-                        }
-                        resolve(data);
-                    } catch(e) {
-                        console.log('[Debug] 解析错误:', e);
-                        resolve(null);
-                    }
-                },
-                onerror: function(err) {
-                    console.log('[Debug] 请求错误:', err);
-                    resolve(null);
-                }
-            });
-        });
-    };
-    console.log('[115RenamePlus] 调试函数已挂载: window.debug115RenamePlus("文件名")');
-    
     // 顶部操作栏按钮样式
     let rename_btn_class = "flex items-center gap-1.5 px-3 py-1.5 text-xs lg:text-sm xl:text-base rounded transition-colors whitespace-nowrap flex-shrink-0 text-gray-700 hover:bg-blue-500 hover:text-white";
     // 悬浮菜单按钮样式
     let hover_btn_class = "flex items-center space-x-1 px-3 py-0.5 text-xs hover:bg-blue-50 text-gray-700 transition-colors cursor-pointer";
+
+    // 按钮图标（共用）
+    const ICON_BUS  = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>';
+    const ICON_DB   = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h6M9 15h3"/></svg>';
+    const ICON_FC2  = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>';
     
     /**
      * 添加按钮的定时任务
@@ -210,7 +167,6 @@
         }
 
         if (!actionBar.getAttribute('data-rename-buttons-injected')) {
-            console.log('[115RenamePlus] 找到操作栏，注入按钮');
             injectButtonsToActionBar(actionBar);
             actionBar.setAttribute('data-rename-buttons-injected', 'true');
         }
@@ -266,27 +222,22 @@
             return btn;
         };
         
-        // 图标
-        const iconBus = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>';
-        const iconDb = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h6"/></svg>';
-        const iconFc2 = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><polygon points="23 7 16 12 23 17"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>';
-        
         // JavBus 按钮
-        const javbusBtn = createButton('JavBus', '#f97316', iconBus);
+        const javbusBtn = createButton('JavBus', '#f97316', ICON_BUS);
         javbusBtn.addEventListener('click', function(e) {
             e.stopPropagation();
             renameFromTopBar(renameJavbus, 'javbus', 'video', true);
         });
         
         // JavDB 按钮
-        const javdbBtn = createButton('JavDB', '#3b82f6', iconDb);
+        const javdbBtn = createButton('JavDB', '#3b82f6', ICON_DB);
         javdbBtn.addEventListener('click', function(e) {
             e.stopPropagation();
             renameFromTopBar(renameJavdb, 'javdb', 'video', true);
         });
-        
+
         // FC2 按钮
-        const fc2Btn = createButton('FC2', '#a855f7', iconFc2);
+        const fc2Btn = createButton('FC2', '#a855f7', ICON_FC2);
         fc2Btn.addEventListener('click', function(e) {
             e.stopPropagation();
             renameFromTopBar(renameFc2, 'fc2', 'video', true);
@@ -409,18 +360,12 @@
             
             const btnContainer = hoverMenu.querySelector('[class*="bg-white rounded-md"]');
             if (!btnContainer) return;
-            console.log("[115RenamePlus] 悬浮菜单注入按钮: " + fileName);
             
-            
-            // 图标
-            const iconBus = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>';
-            const iconDb = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h6"/></svg>';
-            const iconFc2 = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><polygon points="23 7 16 12 23 17"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>';
             
             // JavBus 按钮
             const javbusBtn = document.createElement('button');
             javbusBtn.className = hover_btn_class;
-            javbusBtn.innerHTML = iconBus + '<span style="font-size:14px;">JavBus</span>';
+            javbusBtn.innerHTML = ICON_BUS + '<span style="font-size:14px;">JavBus</span>';
             javbusBtn.title = '通过JavBus改名';
             javbusBtn.addEventListener('click', function(e) {
                 e.stopPropagation();
@@ -430,7 +375,7 @@
             // JavDB 按钮
             const javdbBtn = document.createElement('button');
             javdbBtn.className = hover_btn_class;
-            javdbBtn.innerHTML = iconDb + '<span style="font-size:14px;">JavDB</span>';
+            javdbBtn.innerHTML = ICON_DB + '<span style="font-size:14px;">JavDB</span>';
             javdbBtn.title = '通过JavDB改名';
             javdbBtn.addEventListener('click', function(e) {
                 e.stopPropagation();
@@ -440,7 +385,7 @@
             // FC2 按钮
             const fc2Btn = document.createElement('button');
             fc2Btn.className = hover_btn_class;
-            fc2Btn.innerHTML = iconFc2 + '<span style="font-size:14px;">FC2</span>';
+            fc2Btn.innerHTML = ICON_FC2 + '<span style="font-size:14px;">FC2</span>';
             fc2Btn.title = '通过FC2改名';
             fc2Btn.addEventListener('click', function(e) {
                 e.stopPropagation();
@@ -570,27 +515,27 @@
         // JavBus 按钮 - 橙色图标
         const javbusBtn = document.createElement('button');
         javbusBtn.className = hover_btn_class;
-        javbusBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span style="font-size:14px;">JavBus</span>';
+        javbusBtn.innerHTML = ICON_BUS + '<span style="font-size:14px;">JavBus</span>';
         javbusBtn.title = '通过JavBus改名';
         javbusBtn.addEventListener('click', function(e) {
             e.stopPropagation();
             renameFromHoverMenuByFileName(fileName, renameJavbus, 'javbus', 'video', true);
         });
-        
+
         // JavDB 按钮 - 蓝色图标
         const javdbBtn = document.createElement('button');
         javdbBtn.className = hover_btn_class;
-        javdbBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h6M9 15h3"/></svg><span style="font-size:14px;">JavDB</span>';
+        javdbBtn.innerHTML = ICON_DB + '<span style="font-size:14px;">JavDB</span>';
         javdbBtn.title = '通过JavDB改名';
         javdbBtn.addEventListener('click', function(e) {
             e.stopPropagation();
             renameFromHoverMenuByFileName(fileName, renameJavdb, 'javdb', 'video', true);
         });
-        
+
         // FC2 按钮 - 紫色图标
         const fc2Btn = document.createElement('button');
         fc2Btn.className = hover_btn_class;
-        fc2Btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg><span style="font-size:14px;">FC2</span>';
+        fc2Btn.innerHTML = ICON_FC2 + '<span style="font-size:14px;">FC2</span>';
         fc2Btn.title = '通过FC2改名';
         fc2Btn.addEventListener('click', function(e) {
             e.stopPropagation();
@@ -859,7 +804,6 @@
         }
         let url_s = searchUrl + fh_query;
         let getJavbusSearch = new Promise((resolve, reject) => {
-            console.log("处理搜索页：" + url_s + " (fh=" + fh + ", fh_query=" + fh_query + ")");
             GM_xmlhttpRequest({
                 method: "GET",
                 url: url_s,
@@ -893,12 +837,7 @@
                     if (matchedBox) {
                         fh_o = matchedBox.find("div.photo-info date:first").html();
                         moviePage = matchedBox.attr("href");
-                        console.log("找到完全匹配的番号: " + fh_o);
-                    } else {
-                        console.log("没有找到完全匹配的番号: " + fh + "，搜索结果中无匹配项");
                     }
-                    
-                    console.log("获取到 " +  fh_o );
                     resolve(moviePage);
                 }
             });
@@ -909,7 +848,6 @@
 					resolve();
 				} else if ( rntype=="video" ){
 					if(moviePage){
-						console.log("处理详情页：" + moviePage);
 						GM_xmlhttpRequest({
 							method: "GET",
 							url: moviePage,
@@ -972,10 +910,7 @@
             });
         }
         getJavbusSearch.then(getJavbusDetail)
-            .then(setName,setName)
-            .then(function(result){
-                console.log("改名结束，" + result);
-            });
+            .then(setName,setName);
     }
 
     /**
@@ -1019,7 +954,6 @@
         }
         let url_s = searchUrl + fh_query;
         let getJavdbSearch = new Promise((resolve, reject) => {
-            console.log("处理搜索页：" + url_s);
             GM_xmlhttpRequest({
                 method: "GET",
                 url: url_s,
@@ -1078,12 +1012,7 @@
                         fh_o = matchedItem.find(".video-title strong").text().trim();
                         let href = matchedItem.find("a").attr("href");
                         moviePage = href ? javdbBase + href : null;
-                        console.log("找到完全匹配的番号: " + fh_o);
-                    } else {
-                        console.log("没有找到完全匹配的番号: " + fh + "，搜索结果中无匹配项");
                     }
-                    
-                    console.log("获取到 " + fh_o);
                     resolve(moviePage);
                 }
             });
@@ -1094,7 +1023,6 @@
                     resolve();
                 } else if ( rntype=="video" ){
                     if(moviePage){
-                        console.log("处理详情页：" + moviePage);
                         GM_xmlhttpRequest({
                             method: "GET",
                             url: moviePage,
@@ -1198,10 +1126,7 @@
             });
         }
         getJavdbSearch.then(getJavdbDetail)
-            .then(setName,setName)
-            .then(function(result){
-                console.log("改名结束，" + result);
-            });
+            .then(setName,setName);
     }
 
     /**
@@ -1233,8 +1158,6 @@
             url: searchUrl + fc2Id + "/",
                     withCredentials: true,
             onload: xhr => {
-				console.log("处理影片页 " + searchUrl + fc2Id + "/");
-                // 匹配标题
                 let response = $(xhr.responseText);
                 let title = response
                     .find("div.items_article_MainitemThumb img")
@@ -1253,7 +1176,6 @@
                     title = tmp.textContent || tmp.innerText || "";
                     title = title.trim();
                 }
-				console.log("获取到标题 " + title );
                 // 卖家
                 let user = response
                             .find("div.items_article_headerInfo > ul > li a:last ")
@@ -1530,7 +1452,6 @@
      */
     function getVideoCode(title, type="nomal") {
         title = title.toUpperCase();
-            console.log("传入 title: " + title + " type:" + type);
 
         // 清理引流站前缀（通用正则 + 特殊硬编码）
         title = cleanDomainPrefix(title);
@@ -1556,7 +1477,7 @@
         }
         // 通用格式：XXXXX-XX-C（非 FC2 的番号）
         else if (/^[A-Z]{2,10}[-_ ]?\d{2,6}[-_ ]C$/i.test(title)) {
-            fc2CFlag = true;  // 修复：设置字幕标记
+            fc2CFlag = true;
             title = title.replace(/[-_ ]C$/i, "");
         }
         
@@ -1589,7 +1510,6 @@
 		
 		let t = '';
 		if (type=="mgstage"){
-			console.log("分析mgstage编号");
 			t = title.match(/\d{3,4}[A-Z]{3,4}[\-_]?\d{3,4}/)
 			if (!t) {  // シロウトTV @SIRO-3585
 				t = title.match(/[A-Z]{2,5}[\-_]{1}\d{3,5}/);
@@ -1614,7 +1534,6 @@
 						part = partCandidate;
 					}
 					if (cFlag) t += "-" + cFlag;
-					console.log("找到番号(FC简写):" + t);
 				}
 			}
 
@@ -1632,7 +1551,6 @@
 						part = partCandidate;
 					}
 					if (cFlag) t += "-" + cFlag;
-					console.log("找到番号:" + t);
 					// FC2 已命中就别再掉进后面的通用规则里乱匹配
 				}
 			}
@@ -1703,7 +1621,6 @@
 		}
 
         if (!t) {
-            console.log("没找到番号:" + title);
             return false;
         }
         if (t) {
@@ -1736,10 +1653,8 @@
                     if (prefix.match(/^(CD|HD|FHD|HHB|DISC|PART)$/i)) {
                         tStr = prefix;
                         part = suffix;
-                        console.log("从番号末尾分离数字分段：" + part);
                     } else {
-                        // 对于 LAFBD-41 这种，保留完整番号
-                        console.log("保留完整番号，数字 " + suffix + " 是番号一部分");
+                        // 数字是番号一部分，保留完整番号
                     }
                 }
             }
@@ -1756,7 +1671,6 @@
                 fc2CFlag = true;
             }
 
-            console.log("找到番号:" + tStr);
             return{
                 fh: tStr,
                 part: part,
