@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.1-beta.1
+// @version             0.12.1-beta.2
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -1455,35 +1455,59 @@
     }
 
     /**
-     * 改名成功后刷新：优先 DOM 更新，兜底 SPA 软刷新，最后 reload
+     * 改名成功后刷新：更新文件名并取消选中状态
      */
     function refreshAfterRename(fid, newName) {
-        // 策略1：直接更新 DOM 中对应文件项的显示名
         const items = document.querySelectorAll('.file-list-item');
         for (const item of items) {
             const fileData = getFileDataFromElement(item);
             if (fileData && (String(fileData.fid) === String(fid) || String(fileData.cid) === String(fid))) {
+                // 更新文件名显示
                 const nameEl = item.querySelector('.file-name-responsive');
                 if (nameEl) {
                     nameEl.textContent = newName;
                     nameEl.setAttribute('title', newName);
                 }
+                // 取消选中状态
+                deselectFileItem(item);
                 return;
             }
         }
 
-        // 策略2：触发 Next.js 软导航刷新
+        // 兜底：触发 SPA 软刷新
         setTimeout(function() {
             if (unsafeWindow?.next?.router?.replace) {
                 unsafeWindow.next.router.replace(unsafeWindow.next.router.asPath);
             } else if (typeof unsafeWindow.refreshNetdiskFileList === 'function') {
                 unsafeWindow.refreshNetdiskFileList();
             } else {
-                // 策略3：通过 History API 触发 popstate（SPA 可能响应）
                 window.history.replaceState(null, '', window.location.href);
                 window.dispatchEvent(new PopStateEvent('popstate'));
             }
         }, 500);
+    }
+
+    /**
+     * 取消文件项的选中状态
+     */
+    function deselectFileItem(item) {
+        // 方式1：取消 checkbox
+        const checkbox = item.querySelector('input[type="checkbox"]:checked');
+        if (checkbox) {
+            checkbox.click();
+            return;
+        }
+        // 方式2：取消 aria-checked
+        const ariaEl = item.querySelector('[aria-checked="true"]');
+        if (ariaEl) {
+            ariaEl.click();
+            return;
+        }
+        // 方式3：移除选中 class
+        const groupDiv = item.querySelector('.group');
+        if (groupDiv && groupDiv.classList.contains('bg-blue-100')) {
+            groupDiv.classList.remove('bg-blue-100');
+        }
     }
 
     /**
