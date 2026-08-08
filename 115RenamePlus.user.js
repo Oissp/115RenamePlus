@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.1-beta.2
+// @version             0.12.1-beta.3
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -41,6 +41,13 @@
      * 添加按钮的定时任务
      */
     let interval = setInterval(buttonInterval, 1000);
+
+    // 安全 HTML 解析：使用 DOMParser 避免浏览器自动加载图片等资源
+    const parser = new DOMParser();
+    function parseHTML(html) {
+        const doc = parser.parseFromString(html, 'text/html');
+        return $(doc);
+    }
 
     // javbus
     let javbusBase = "https://www.javbus.com/";
@@ -864,7 +871,7 @@
                 url: url_s,
                     withCredentials: true,
                 onload: xhr => {
-                    let response = $(xhr.responseText);
+                    let response = parseHTML(xhr.responseText);
                     
                     // 获取所有搜索结果，找到与原始番号完全匹配的结果
                     let movieBoxes = response.find("a.movie-box");
@@ -908,7 +915,7 @@
 							url: moviePage,
                     withCredentials: true,
 							onload: xhr => {
-								let response = $(xhr.responseText);
+								let response = parseHTML(xhr.responseText);
 								// 标题
 								title = response
 								    .find("h3")
@@ -1014,7 +1021,7 @@
                 url: url_s,
                     withCredentials: true,
                 onload: xhr => {
-                    let response = $(xhr.responseText);
+                    let response = parseHTML(xhr.responseText);
                     
                     // 获取所有搜索结果，找到与原始番号完全匹配的结果
                     let movieItems = response.find(".movie-list .item");
@@ -1083,7 +1090,7 @@
                             url: moviePage,
                     withCredentials: true,
                             onload: xhr => {
-                                let response = $(xhr.responseText);
+                                let response = parseHTML(xhr.responseText);
                                 // 标题
                                 title = response
                                     .find(".current-title")
@@ -1213,7 +1220,7 @@
             url: searchUrl + fc2Id + "/",
                     withCredentials: true,
             onload: xhr => {
-                let response = $(xhr.responseText);
+                let response = parseHTML(xhr.responseText);
                 let title = response
                     .find("div.items_article_MainitemThumb img")
                     .attr("title");
