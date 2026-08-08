@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.1-beta.7
+// @version             0.12.1-beta.8
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -876,7 +876,7 @@
             GM_xmlhttpRequest({
                 method: "GET",
                 url: url_s,
-                    withCredentials: true,
+                anonymous: false,
                 onload: xhr => {
                     let response = parseHTML(xhr.responseText);
                     
@@ -920,7 +920,7 @@
 						GM_xmlhttpRequest({
 							method: "GET",
 							url: moviePage,
-                    withCredentials: true,
+							anonymous: false,
 							onload: xhr => {
 								let response = parseHTML(xhr.responseText);
 								// 标题
@@ -1026,7 +1026,7 @@
             GM_xmlhttpRequest({
                 method: "GET",
                 url: url_s,
-                    withCredentials: true,
+                anonymous: false,
                 onload: xhr => {
                     let response = parseHTML(xhr.responseText);
 
@@ -1109,7 +1109,7 @@
                         GM_xmlhttpRequest({
                             method: "GET",
                             url: moviePage,
-                    withCredentials: true,
+                            anonymous: false,
                             onload: xhr => {
                                 let response = parseHTML(xhr.responseText);
                                 // 标题
@@ -1242,7 +1242,7 @@
         GM_xmlhttpRequest({
             method: "GET",
             url: searchUrl + fc2Id + "/",
-                    withCredentials: true,
+            anonymous: false,
             onload: xhr => {
                 let response = parseHTML(xhr.responseText);
                 let title = response
