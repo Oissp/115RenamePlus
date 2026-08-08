@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.1-beta.4
+// @version             0.12.1-beta.5
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -1022,9 +1022,14 @@
                     withCredentials: true,
                 onload: xhr => {
                     let response = parseHTML(xhr.responseText);
-                    
+
                     // 获取所有搜索结果，找到与原始番号完全匹配的结果
                     let movieItems = response.find(".movie-list .item");
+                    // 兜底：JavDB 可能改了结构，尝试其他选择器
+                    if (!movieItems.length) {
+                        movieItems = response.find(".grid-item, .movie-list a, [class*='movie'] .item");
+                    }
+                    console.log('[115RenamePlus] JavDB搜索:', url_s, '结果数:', movieItems.length);
                     let matchedItem = null;
                     
                     // 统一番号归一化：用于在搜索结果里做稳健匹配（特别是 FC2-PPV vs FC2）
@@ -1075,7 +1080,12 @@
                         let href = matchedItem.find("a").attr("href");
                         moviePage = href ? javdbBase + href : null;
                     }
+                    console.log('[115RenamePlus] JavDB匹配结果:', matchedItem ? fh_o : '无匹配');
                     resolve(moviePage);
+                },
+                onerror: (e) => {
+                    console.log('[115RenamePlus] JavDB请求失败:', e);
+                    resolve(null);
                 }
             });
         });
@@ -1177,12 +1187,15 @@
                 if(moviePage){
                     let actor = actors.toString();
                     // 构建新名称
-                    let newName = buildNewName(fh_o, rntype, suffix, if4k, ifChineseCaptions, part, title, date, actor, ifAddDate);                    if (newName) {
+                    let newName = buildNewName(fh_o, rntype, suffix, if4k, ifChineseCaptions, part, title, date, actor, ifAddDate);
+                    if (newName) {
                         // 修改名称
                         send_115(fid, newName, fh_o);
                     }
                     resolve(newName);
                 }else {
+                    console.log('[115RenamePlus] JavDB未查到结果:', fh);
+                    GM_notification(getDetails(fh, "JavDB未查到结果"));
                     resolve("没有查到结果");
                 }
             });
