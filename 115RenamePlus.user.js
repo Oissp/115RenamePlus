@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.0
+// @version             0.12.1-beta.1
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -357,35 +357,39 @@
     }
     
     /**
-     * 查找文件项的悬浮菜单
+     * 查找文件项的悬浮菜单（或操作区）
      */
     function findHoverMenu(item) {
-        // 策略1：Tailwind group-hover 模式
-        let menu = item.querySelector('[class*="group-hover"]');
-        // 策略2：绝对定位的子容器（悬浮菜单通常绝对定位）
-        if (!menu) menu = item.querySelector(':scope > div[class*="absolute"]');
-        // 策略3：隐藏状态的直接子 div
-        if (!menu) menu = item.querySelector(':scope > div[class*="hidden"]');
-        return menu;
+        // 找 .group 内的 flex 行容器（文件行主体），按钮将插入其中
+        const groupDiv = item.querySelector('.group') || item;
+        const flexRow = groupDiv.querySelector(':scope > .flex.items-center');
+        return flexRow || groupDiv;
     }
 
     /**
-     * 查找悬浮菜单内的按钮容器
+     * 查找或创建悬浮按钮容器
      */
     function findBtnContainer(hoverMenu) {
-        // 策略1：带圆角背景的 div
-        let container = hoverMenu.querySelector('[class*="rounded"]');
-        // 策略2：包含 >=2 个按钮的 div
-        if (!container) {
-            const divs = hoverMenu.querySelectorAll(':scope > div, :scope > div > div');
-            for (const div of divs) {
-                if (div.querySelectorAll('button').length >= 2) {
-                    container = div;
-                    break;
-                }
-            }
+        // 如果已有我们创建的容器，直接复用
+        let existing = hoverMenu.querySelector('[data-rename-menu]');
+        if (existing) return existing;
+
+        // 查找原生的悬浮操作按钮容器
+        let container = hoverMenu.querySelector('[class*="group-hover"][class*="flex"]');
+        if (container && !container.classList.contains('file-list-item') && container.querySelectorAll('button').length >= 1) {
+            return container;
         }
-        return container || hoverMenu;
+
+        // 没有现成容器，创建一个 hover 时才显示的按钮组
+        const btnGroup = document.createElement('div');
+        btnGroup.className = 'hidden group-hover:flex items-center absolute right-8 top-1/2 -translate-y-1/2 bg-white rounded-md shadow-sm z-10 gap-0.5 px-1';
+        btnGroup.setAttribute('data-rename-menu', 'true');
+        // 确保父容器相对定位
+        if (!hoverMenu.classList.contains('relative')) {
+            hoverMenu.style.position = 'relative';
+        }
+        hoverMenu.appendChild(btnGroup);
+        return btnGroup;
     }
 
     /**
