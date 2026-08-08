@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.1-beta.3
+// @version             0.12.1-beta.4
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -46,7 +46,7 @@
     const parser = new DOMParser();
     function parseHTML(html) {
         const doc = parser.parseFromString(html, 'text/html');
-        return $(doc);
+        return $(doc.body);
     }
 
     // javbus
