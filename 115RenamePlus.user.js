@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.1-beta.5
+// @version             0.12.1-beta.6
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -1028,6 +1028,10 @@
                     // 兜底：JavDB 可能改了结构，尝试其他选择器
                     if (!movieItems.length) {
                         movieItems = response.find(".grid-item, .movie-list a, [class*='movie'] .item");
+                    }
+                    // 诊断：如果还是 0，输出页面结构帮助定位
+                    if (!movieItems.length) {
+                        console.log('[115RenamePlus] JavDB页面结构:', xhr.responseText.substring(0, 2000));
                     }
                     console.log('[115RenamePlus] JavDB搜索:', url_s, '结果数:', movieItems.length);
                     let matchedItem = null;
