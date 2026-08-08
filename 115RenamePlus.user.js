@@ -1,10 +1,10 @@
 // ==UserScript==
-// @name                115RenamePlus (新版UI测试)
+// @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.0-beta.11
-// @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/new-ui-adapt/115RenamePlus.user.js
-// @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/new-ui-adapt/115RenamePlus.user.js
-// @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名) - 新版UI适配测试版
+// @version             0.12.0
+// @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
+// @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
+// @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
 // @author              db117, FAN0926, LSD08KM
 // @match               https://115.com/*
 // @match               https://web.115.com/*
@@ -74,7 +74,25 @@
         if (!el) return null;
         const fiberKey = getReactFiberKey(el);
         if (fiberKey) {
-            return el[fiberKey]?.child?.memoizedProps?.file || null;
+            const fiber = el[fiberKey];
+            // 优先从 child 获取（未选中状态）
+            let fileData = fiber?.child?.memoizedProps?.file;
+            // 选中后 fiber 结构变化，数据移到 parent (return) 上
+            if (!fileData) {
+                fileData = fiber?.return?.memoizedProps?.file;
+            }
+            // 兜底：向上遍历最多 5 层 parent
+            if (!fileData) {
+                let current = fiber?.return;
+                for (let i = 0; i < 5 && current; i++) {
+                    if (current.memoizedProps?.file) {
+                        fileData = current.memoizedProps.file;
+                        break;
+                    }
+                    current = current.return;
+                }
+            }
+            return fileData || null;
         }
         return null;
     }
