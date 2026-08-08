@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.1-beta.6
+// @version             0.12.1-beta.7
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -19,6 +19,13 @@
 // @grant               GM_xmlhttpRequest
 // @grant               unsafeWindow
 // @connect             webapi.115.com
+// @connect             javdb.com
+// @connect             www.javbus.com
+// @connect             javbus.com
+// @connect             fanbus.blog
+// @connect             busdmm.club
+// @connect             seedmm.blog
+// @connect             adult.contents.fc2.com
 // ==/UserScript==
 
     /*
