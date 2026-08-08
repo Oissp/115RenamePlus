@@ -1,14 +1,13 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.1-beta.10
+// @version             0.12.1-beta.11
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
 // @author              db117, FAN0926, LSD08KM
 // @match               https://115.com/*
 // @match               https://web.115.com/*
-// @match               https://javdb.com/*
 // @domain              javbus.com
 // @domain              fanbus.blog
 // @domain              busdmm.club
@@ -18,10 +17,6 @@
 // @require             https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js
 // @grant               GM_notification
 // @grant               GM_xmlhttpRequest
-// @grant               GM_setValue
-// @grant               GM_getValue
-// @grant               GM_addValueChangeListener
-// @grant               GM_openInTab
 // @grant               unsafeWindow
 // @connect             webapi.115.com
 // @connect             javdb.com
@@ -38,95 +33,6 @@
      */
 (function () {
     'use strict';
-
-    // ===== JavDB 标签页端逻辑 =====
-    // 当脚本在 javdb.com 上运行时，解析当前页面数据并回传给 115 标签页
-    if (location.hostname === 'javdb.com') {
-        javdbTabHandler();
-        return; // 不执行 115 页面的逻辑
-    }
-
-    /**
-     * JavDB 标签页处理器：解析页面内容，通过 GM_setValue 回传数据
-     */
-    function javdbTabHandler() {
-        const url = location.href;
-
-        // 搜索结果页
-        if (url.includes('/search?q=')) {
-            const items = document.querySelectorAll('.movie-list .item');
-            const results = [];
-            items.forEach(function(item) {
-                const titleEl = item.querySelector('.video-title strong');
-                const linkEl = item.querySelector('a');
-                if (titleEl && linkEl) {
-                    results.push({
-                        fh: titleEl.textContent.trim(),
-                        href: linkEl.getAttribute('href')
-                    });
-                }
-            });
-            GM_setValue('javdb_search_response', JSON.stringify({
-                url: url,
-                results: results,
-                timestamp: Date.now()
-            }));
-            // 自动关闭标签页
-            window.close();
-            return;
-        }
-
-        // 详情页（/v/ 开头）
-        if (/\/v\/[a-zA-Z0-9]+/.test(location.pathname)) {
-            const title = (document.querySelector('.current-title') || {}).textContent || '';
-            let date = '';
-            let actors = [];
-
-            // 获取所有标签
-            document.querySelectorAll('.panel-block').forEach(function(block) {
-                const strong = block.querySelector('strong');
-                if (!strong) return;
-                const key = strong.textContent.replace(':', '').trim();
-
-                if (key === '日期') {
-                    const dateMatch = block.textContent.match(/\d{4}-\d{2}-\d{2}/);
-                    if (dateMatch) date = dateMatch[0];
-                }
-                if (['演員', '演员', '出演', '出演者', 'Cast'].includes(key)) {
-                    block.querySelectorAll('a[href*="/actors/"]').forEach(function(a) {
-                        const nextStrong = a.nextElementSibling;
-                        if (nextStrong && nextStrong.classList.contains('female')) {
-                            const name = a.textContent.trim();
-                            if (name && actors.indexOf(name) === -1) actors.push(name);
-                        }
-                    });
-                }
-            });
-
-            // 兜底演员
-            if (!actors.length) {
-                document.querySelectorAll('a[href*="/actors/"]').forEach(function(a) {
-                    const nextStrong = a.nextElementSibling;
-                    if (nextStrong && nextStrong.classList.contains('female')) {
-                        const name = a.textContent.trim();
-                        if (name && actors.indexOf(name) === -1) actors.push(name);
-                    }
-                });
-            }
-
-            GM_setValue('javdb_detail_response', JSON.stringify({
-                url: url,
-                title: title.trim(),
-                date: date,
-                actors: actors,
-                timestamp: Date.now()
-            }));
-            window.close();
-            return;
-        }
-    }
-
-    // ===== 以下是 115 页面的逻辑 =====
 
     // 顶部操作栏按钮样式
     let rename_btn_class = "flex items-center gap-1.5 px-3 py-1.5 text-xs lg:text-sm xl:text-base rounded transition-colors whitespace-nowrap flex-shrink-0 text-gray-700 hover:bg-blue-500 hover:text-white";
@@ -1105,108 +1011,158 @@
         requestJavdb(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, javdbSearch);
     }
     function requestJavdb(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, searchUrl) {
+        let title;
+        let fh_o;
+        let date;
+        let moviePage;
+        let actors = [];
         let fh_query = fh;
         if (/^FC2-PPV-\d{5,8}-C$/i.test(fh_query)) {
             fh_query = fh_query.replace(/-C$/i, "");
         }
         let url_s = searchUrl + fh_query;
+        let getJavdbSearch = new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: "GET",
+                url: url_s,
+                onload: xhr => {
+                    let response = parseHTML(xhr.responseText);
 
-        // 通过后台标签页访问 JavDB（绕过 Cloudflare）
-        console.log('[115RenamePlus] JavDB搜索(标签页方式):', url_s);
-
-        // 监听搜索结果回传
-        const searchListener = GM_addValueChangeListener('javdb_search_response', function(name, oldVal, newVal, remote) {
-            if (!remote) return;
-            GM_removeValueChangeListener(searchListener);
-
-            let searchData;
-            try { searchData = JSON.parse(newVal); } catch(e) { searchData = null; }
-
-            if (!searchData || !searchData.results || !searchData.results.length) {
-                console.log('[115RenamePlus] JavDB未查到结果:', fh_query);
-                GM_notification(getDetails(fh, "JavDB未查到结果"));
-                return;
-            }
-
-            // 番号匹配
-            function normCode(s) {
-                if (!s) return "";
-                let x = String(s).toUpperCase().replace(/[\s\-_]/g, "");
-                if (x.startsWith("FC2")) x = x.replace(/PPV/g, "");
-                return x;
-            }
-
-            let matched = null;
-            for (let item of searchData.results) {
-                let a = item.fh.toUpperCase();
-                let b = fh_query.toUpperCase();
-                if (a === b || normCode(a) === normCode(b)) {
-                    matched = item;
-                    break;
-                }
-                if (b.indexOf("FC2") === 0) {
-                    let aNum = a.match(/FC2[^0-9]*(\d{5,8})/i);
-                    let bNum = b.match(/FC2[^0-9]*(\d{5,8})/i);
-                    if (aNum && bNum && aNum[1] === bNum[1]) {
-                        matched = item;
-                        break;
+                    let movieItems = response.find(".movie-list .item");
+                    if (!movieItems.length) {
+                        movieItems = response.find(".grid-item, .movie-list a, [class*='movie'] .item");
                     }
-                }
-            }
+                    console.log('[115RenamePlus] JavDB搜索:', url_s, '结果数:', movieItems.length);
+                    let matchedItem = null;
 
-            if (!matched) {
-                console.log('[115RenamePlus] JavDB搜索结果无匹配:', fh_query);
-                GM_notification(getDetails(fh, "JavDB未匹配到番号"));
-                return;
-            }
-
-            let fh_o = matched.fh;
-            console.log('[115RenamePlus] JavDB匹配:', fh_o);
-
-            if (rntype === "picture") {
-                let newName = buildNewName(fh_o, rntype, suffix, if4k, ifChineseCaptions, part, '', '', '', ifAddDate);
-                if (newName) send_115(fid, newName, fh_o);
-                return;
-            }
-
-            // 打开详情页获取更多信息
-            let detailUrl = 'https://javdb.com' + matched.href;
-            const detailListener = GM_addValueChangeListener('javdb_detail_response', function(name2, oldVal2, newVal2, remote2) {
-                if (!remote2) return;
-                GM_removeValueChangeListener(detailListener);
-
-                let detailData;
-                try { detailData = JSON.parse(newVal2); } catch(e) { detailData = null; }
-
-                let title = '';
-                let date = '';
-                let actors = [];
-                if (detailData) {
-                    title = detailData.title || '';
-                    date = detailData.date || '';
-                    actors = detailData.actors || [];
-                    // 移除番号前缀
-                    if (title && fh_o && title.toUpperCase().startsWith(fh_o.toUpperCase())) {
-                        title = title.slice(fh_o.length).trim();
+                    function normCode(s) {
+                        if (!s) return "";
+                        let x = String(s).toUpperCase().replace(/[\s\-_]/g, "");
+                        if (x.startsWith("FC2")) x = x.replace(/PPV/g, "");
+                        return x;
                     }
-                    // 去掉 title 末尾的演员名
-                    for (let a of actors) {
-                        if (a && title.endsWith(" " + a)) {
-                            title = title.slice(0, title.length - (a.length + 1)).trim();
+
+                    movieItems.each(function() {
+                        let item = $(this);
+                        let itemFh = item.find(".video-title strong").text().trim();
+                        if (!itemFh) return;
+
+                        let a = itemFh.toUpperCase();
+                        let b = fh_query.toUpperCase();
+
+                        if (a === b) { matchedItem = item; return false; }
+                        if (normCode(a) === normCode(b)) { matchedItem = item; return false; }
+                        if (b.indexOf("FC2") === 0) {
+                            let aNum = a.match(/FC2[^0-9]*(\d{5,8})/i);
+                            let bNum = b.match(/FC2[^0-9]*(\d{5,8})/i);
+                            if (aNum && bNum && aNum[1] === bNum[1]) { matchedItem = item; return false; }
                         }
+                    });
+
+                    if (matchedItem) {
+                        fh_o = matchedItem.find(".video-title strong").text().trim();
+                        let href = matchedItem.find("a").attr("href");
+                        moviePage = href ? javdbBase + href : null;
+                    }
+                    resolve(moviePage);
+                },
+                onerror: (e) => {
+                    console.log('[115RenamePlus] JavDB请求失败:', e);
+                    resolve(null);
+                }
+            });
+        });
+        function getJavdbDetail(){
+            return new Promise((resolve, reject) => {
+                if (rntype == "picture") {
+                    resolve();
+                } else if (rntype == "video") {
+                    if (moviePage) {
+                        GM_xmlhttpRequest({
+                            method: "GET",
+                            url: moviePage,
+                            onload: xhr => {
+                                let response = parseHTML(xhr.responseText);
+                                title = response.find(".current-title").text().trim();
+                                if (title && fh_o && title.startsWith(fh_o)) {
+                                    title = title.slice(fh_o.length).trim();
+                                }
+
+                                let labels = {};
+                                response.find(".panel-block").each(function() {
+                                    let strong = $(this).find("strong");
+                                    if (strong.length) {
+                                        let key = strong.text().replace(":", "").trim();
+                                        labels[key] = $(this);
+                                    }
+                                });
+
+                                if (labels["日期"]) {
+                                    let dateText = labels["日期"].find(".value").text().trim();
+                                    date = dateText.match(/\d{4}-\d{2}-\d{2}/);
+                                }
+
+                                let actorBlock = labels["演員"] || labels["演员"] || labels["出演"] || labels["出演者"] || labels["Cast"];
+                                if (actorBlock) {
+                                    actorBlock.find(".value a").each(function(){
+                                        let $a = $(this);
+                                        let href = $a.attr("href") || "";
+                                        let a = $a.text().trim();
+                                        if (!a) return;
+                                        if (href.indexOf("/actors/") === -1) return;
+                                        let nextStrong = $a.next("strong.symbol");
+                                        if (nextStrong.length && nextStrong.hasClass("female")) {
+                                            if (actors.indexOf(a) === -1) actors.push(a);
+                                        }
+                                    });
+                                }
+
+                                if (!actors.length) {
+                                    response.find("a[href*=\"/actors/\"]").each(function(){
+                                        let $a = $(this);
+                                        let a = $a.text().trim();
+                                        if (!a) return;
+                                        if (a.indexOf(",") !== -1) return;
+                                        let nextStrong = $a.next("strong.symbol");
+                                        if (!(nextStrong.length && nextStrong.hasClass("female"))) return;
+                                        if (actors.indexOf(a) === -1) actors.push(a);
+                                    });
+                                }
+
+                                if (title && actors.length) {
+                                    for (let a of actors) {
+                                        if (a && title.endsWith(" " + a)) {
+                                            title = title.slice(0, title.length - (a.length + 1)).trim();
+                                        }
+                                    }
+                                }
+                                resolve();
+                            }
+                        });
+                    } else {
+                        resolve();
                     }
                 }
-
-                let actor = actors.join(',');
-                let newName = buildNewName(fh_o, rntype, suffix, if4k, ifChineseCaptions, part, title, date, actor, ifAddDate);
-                if (newName) send_115(fid, newName, fh_o);
             });
-
-            GM_openInTab(detailUrl, { active: false, insert: true });
-        });
-
-        // 打开搜索页
-        GM_openInTab(url_s, { active: false, insert: true });
+        }
+        function setName(){
+            return new Promise((resolve, reject) => {
+                if (moviePage) {
+                    let actor = actors.toString();
+                    let newName = buildNewName(fh_o, rntype, suffix, if4k, ifChineseCaptions, part, title, date, actor, ifAddDate);
+                    if (newName) {
+                        send_115(fid, newName, fh_o);
+                    }
+                    resolve(newName);
+                } else {
+                    console.log('[115RenamePlus] JavDB未查到结果:', fh);
+                    GM_notification(getDetails(fh, "JavDB未查到结果"));
+                    resolve("没有查到结果");
+                }
+            });
+        }
+        getJavdbSearch.then(getJavdbDetail)
+            .then(setName, setName);
     }
 
     /**
