@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.1-beta.8
+// @version             0.12.1-beta.9
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -1026,7 +1026,11 @@
             GM_xmlhttpRequest({
                 method: "GET",
                 url: url_s,
-                anonymous: false,
+                headers: {
+                    'User-Agent': navigator.userAgent,
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
+                },
                 onload: xhr => {
                     let response = parseHTML(xhr.responseText);
 
@@ -1109,7 +1113,11 @@
                         GM_xmlhttpRequest({
                             method: "GET",
                             url: moviePage,
-                            anonymous: false,
+                            headers: {
+                                'User-Agent': navigator.userAgent,
+                                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8'
+                            },
                             onload: xhr => {
                                 let response = parseHTML(xhr.responseText);
                                 // 标题
