@@ -113,42 +113,45 @@
     }
     
     /**
-     * 通过 API 获取当前目录的文件列表（新版UI专用）
-     * localStorage 数据不可靠，需要通过 API 获取正确的 fid
+     * 通过 API 获取当前目录的文件列表（新版UI专用，支持分页）
      */
-    function fetchFileListByAPI(cid) {
-        return new Promise((resolve, reject) => {
-            // 使用新版115实际使用的 API 端点
-            const apiUrl = 'https://webapi.115.com/files?aid=1&cid=' + cid + '&offset=0&limit=50&type=0&show_dir=1&fc_mix=1&natsort=1&format=json';
-            
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: apiUrl,
-                headers: {
-                    'Origin': 'https://115.com',
-                    'Referer': 'https://115.com/'
-                },
-                withCredentials: true,
-                onload: function(response) {
-                    try {
-                        const data = JSON.parse(response.responseText);
-                        if (data.state && data.data) {
-                            resolve(data.data);
-                        } else {
-                            console.log('[115RenamePlus] API 返回数据异常:', data);
-                            resolve(null);
-                        }
-                    } catch (e) {
-                        console.log('[115RenamePlus] 解析 API 响应失败:', e);
-                        resolve(null);
-                    }
-                },
-                onerror: function(error) {
-                    console.log('[115RenamePlus] API 请求失败:', error);
-                    resolve(null);
-                }
+    async function fetchFileListByAPI(cid) {
+        const PAGE_SIZE = 115;
+        let allFiles = [];
+        let offset = 0;
+
+        while (true) {
+            const apiUrl = 'https://webapi.115.com/files?aid=1&cid=' + cid + '&offset=' + offset + '&limit=' + PAGE_SIZE + '&type=0&show_dir=1&fc_mix=1&natsort=1&format=json';
+
+            const data = await new Promise((resolve) => {
+                GM_xmlhttpRequest({
+                    method: 'GET',
+                    url: apiUrl,
+                    headers: {
+                        'Origin': 'https://115.com',
+                        'Referer': 'https://115.com/'
+                    },
+                    withCredentials: true,
+                    onload: function(response) {
+                        try {
+                            const parsed = JSON.parse(response.responseText);
+                            if (parsed.state) resolve(parsed);
+                            else resolve(null);
+                        } catch (e) { resolve(null); }
+                    },
+                    onerror: () => resolve(null)
+                });
             });
-        });
+
+            if (!data || !data.data) break;
+
+            allFiles = allFiles.concat(data.data);
+            // 最后一页或已拿完
+            if (data.data.length < PAGE_SIZE) break;
+            offset += PAGE_SIZE;
+        }
+
+        return allFiles.length > 0 ? allFiles : null;
     }
     
     /**
@@ -197,23 +200,18 @@
      * 查找选中文件的顶部操作栏
      */
     function findSelectedFileActionBar() {
-        // 遍历页面上所有 div，查找包含"已选中 X 项"文本的元素的父级操作栏容器
-        const allDivs = document.querySelectorAll('div');
-
-        for (const div of allDivs) {
-            const text = (div.innerText || '');
-            // 找"已选中 X 项"这样的文本
-            if (/已选中\s*\d+\s*项/.test(text) && text.length < 30) {
-                // 向上查找包含多个按钮的容器
-                let container = div;
-                for (let i = 0; i < 5; i++) {
-                    container = container.parentElement;
-                    if (!container) break;
-
-                    const buttons = container.querySelectorAll('button');
-                    if (buttons.length > 5) {
-                        return container;
-                    }
+        // 只在 sticky/fixed 定位的容器内搜索 span，避免遍历全部 div
+        const candidates = document.querySelectorAll('span, [class*="sticky"] span, [class*="fixed"] span');
+        for (const span of candidates) {
+            const text = span.textContent || '';
+            if (!/已选中\s*\d+\s*项/.test(text) || text.length > 30) continue;
+            // 向上查找包含多个按钮的操作栏容器
+            let container = span;
+            for (let i = 0; i < 6; i++) {
+                container = container.parentElement;
+                if (!container) break;
+                if (container.querySelectorAll('button').length >= 5) {
+                    return container;
                 }
             }
         }
@@ -359,24 +357,56 @@
     }
     
     /**
+     * 查找文件项的悬浮菜单
+     */
+    function findHoverMenu(item) {
+        // 策略1：Tailwind group-hover 模式
+        let menu = item.querySelector('[class*="group-hover"]');
+        // 策略2：绝对定位的子容器（悬浮菜单通常绝对定位）
+        if (!menu) menu = item.querySelector(':scope > div[class*="absolute"]');
+        // 策略3：隐藏状态的直接子 div
+        if (!menu) menu = item.querySelector(':scope > div[class*="hidden"]');
+        return menu;
+    }
+
+    /**
+     * 查找悬浮菜单内的按钮容器
+     */
+    function findBtnContainer(hoverMenu) {
+        // 策略1：带圆角背景的 div
+        let container = hoverMenu.querySelector('[class*="rounded"]');
+        // 策略2：包含 >=2 个按钮的 div
+        if (!container) {
+            const divs = hoverMenu.querySelectorAll(':scope > div, :scope > div > div');
+            for (const div of divs) {
+                if (div.querySelectorAll('button').length >= 2) {
+                    container = div;
+                    break;
+                }
+            }
+        }
+        return container || hoverMenu;
+    }
+
+    /**
      * 在悬浮菜单中注入按钮（备选方案）
      */
     function injectButtonsToHoverMenus() {
         const fileItems = document.querySelectorAll('.file-list-item');
-        
+
         fileItems.forEach((item) => {
             if (item.getAttribute('data-rename-buttons-injected') === 'true') {
                 return;
             }
-            
+
             const nameEl = item.querySelector('.file-name-responsive');
             const fileName = nameEl?.getAttribute('title') || nameEl?.innerText;
             if (!fileName) return;
-            
-            const hoverMenu = item.querySelector('[class*="hidden group-hover:flex"]');
+
+            const hoverMenu = findHoverMenu(item);
             if (!hoverMenu) return;
-            
-            const btnContainer = hoverMenu.querySelector('[class*="bg-white rounded-md"]');
+
+            const btnContainer = findBtnContainer(hoverMenu);
             if (!btnContainer) return;
             
             
@@ -476,10 +506,13 @@
      * 设置 MutationObserver 监听新增文件项
      */
     function setupMutationObserver() {
-        const fileListContainer = document.querySelector('[class*="overflow-y-auto"]');
+        // 优先找包含 .file-list-item 的滚动容器，兜底用 #__next 或 body
+        let fileListContainer = document.querySelector('[class*="overflow-y-auto"]');
         if (!fileListContainer) {
-            return;
+            const firstItem = document.querySelector('.file-list-item');
+            fileListContainer = firstItem?.closest('[class*="overflow"]') || document.getElementById('__next') || document.body;
         }
+        if (!fileListContainer) return;
         
         const observer = new MutationObserver(function(mutations) {
             mutations.forEach(function(mutation) {
@@ -517,10 +550,10 @@
         const fileName = nameEl?.getAttribute('title') || nameEl?.innerText;
         if (!fileName) return;
         
-        const hoverMenu = item.querySelector('[class*="hidden group-hover:flex"]');
+        const hoverMenu = findHoverMenu(item);
         if (!hoverMenu) return;
-        
-        const btnContainer = hoverMenu.querySelector('[class*="bg-white rounded-md"]');
+
+        const btnContainer = findBtnContainer(hoverMenu);
         if (!btnContainer) return;
         
         // 隐藏不需要的按钮
@@ -1403,15 +1436,7 @@
                     } else {
                         GM_notification(getDetails(fh, "修改成功"));
                         console.log("修改文件名称,fh:" + fh, "name:" + file_name);
-                        // 刷新文件列表
-                        setTimeout(function() {
-                            // 优先尝试115内部刷新函数
-                            if (typeof unsafeWindow.refreshNetdiskFileList === 'function') {
-                                unsafeWindow.refreshNetdiskFileList();
-                            } else {
-                                location.reload();
-                            }
-                        }, 1000);
+                        refreshAfterRename(id, file_name);
                     }
                 } catch (e) {
                     GM_notification(getDetails(fh, "修改失败"));
@@ -1423,6 +1448,38 @@
                 console.log("请求失败:", e);
             }
         });
+    }
+
+    /**
+     * 改名成功后刷新：优先 DOM 更新，兜底 SPA 软刷新，最后 reload
+     */
+    function refreshAfterRename(fid, newName) {
+        // 策略1：直接更新 DOM 中对应文件项的显示名
+        const items = document.querySelectorAll('.file-list-item');
+        for (const item of items) {
+            const fileData = getFileDataFromElement(item);
+            if (fileData && (String(fileData.fid) === String(fid) || String(fileData.cid) === String(fid))) {
+                const nameEl = item.querySelector('.file-name-responsive');
+                if (nameEl) {
+                    nameEl.textContent = newName;
+                    nameEl.setAttribute('title', newName);
+                }
+                return;
+            }
+        }
+
+        // 策略2：触发 Next.js 软导航刷新
+        setTimeout(function() {
+            if (unsafeWindow?.next?.router?.replace) {
+                unsafeWindow.next.router.replace(unsafeWindow.next.router.asPath);
+            } else if (typeof unsafeWindow.refreshNetdiskFileList === 'function') {
+                unsafeWindow.refreshNetdiskFileList();
+            } else {
+                // 策略3：通过 History API 触发 popstate（SPA 可能响应）
+                window.history.replaceState(null, '', window.location.href);
+                window.dispatchEvent(new PopStateEvent('popstate'));
+            }
+        }, 500);
     }
 
     /**
