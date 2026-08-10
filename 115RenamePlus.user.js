@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.1-beta.11
+// @version             0.12.1-beta.12
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -214,6 +214,7 @@
      * 查找选中文件的顶部操作栏
      */
     function findSelectedFileActionBar() {
+        // 方式1：通过"已选中 N 项"文案定位（多选时通常会显示该计数文案）
         // 只在 sticky/fixed 定位的容器内搜索 span，避免遍历全部 div
         const candidates = document.querySelectorAll('span, [class*="sticky"] span, [class*="fixed"] span');
         for (const span of candidates) {
@@ -229,6 +230,22 @@
                 }
             }
         }
+
+        // 方式2：单选文件时可能不显示"已选中 N 项"计数文案，改为直接从
+        // "重命名"按钮向上查找操作栏容器（单选时该按钮通常会出现）
+        const allButtons = document.querySelectorAll('button');
+        for (const btn of allButtons) {
+            const text = (btn.innerText || btn.title || '').trim();
+            if (text !== '重命名') continue;
+            let container = btn.parentElement;
+            for (let i = 0; i < 6 && container; i++) {
+                if (container.querySelectorAll('button').length >= 3) {
+                    return container;
+                }
+                container = container.parentElement;
+            }
+        }
+
         return null;
     }
     
