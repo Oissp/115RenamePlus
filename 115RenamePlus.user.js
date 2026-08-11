@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.1-beta.16
+// @version             0.12.1-beta.17
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -64,6 +64,8 @@
     const FLOAT_POS_KEY = '115renameplus_float_pos';
     // 悬浮按钮实例清理函数（避免 SPA 重建时 document 监听器累积）
     let floatDragCleanup = null;
+    // 列表刷新去抖定时器（批量改名时只刷新一次）
+    let refreshTimer = null;
     
     /**
      * 添加按钮的定时任务
@@ -1512,30 +1514,146 @@
      */
     function refreshAfterRename(fid, newName) {
         const items = document.querySelectorAll('.file-list-item');
+        let found = false;
+
         for (const item of items) {
-            const fileData = getFileDataFromElement(item);
-            if (fileData && (String(fileData.fid) === String(fid) || String(fileData.cid) === String(fid))) {
-                // 更新文件名显示
-                const nameEl = item.querySelector('.file-name-responsive');
-                if (nameEl) {
-                    nameEl.textContent = newName;
-                    nameEl.setAttribute('title', newName);
-                }
-                // 取消选中状态
-                deselectFileItem(item);
-                return;
-            }
+            const fileData = getItemFileData(item);
+            if (!fileData) continue;
+            if (String(fileData.fid) !== String(fid) && String(fileData.cid) !== String(fid)) continue;
+            found = true;
+
+            // 更新文件名显示
+            updateItemName(item, newName);
+            // 同步 React Fiber 数据，防止重渲染回退
+            updateFiberFileName(item, newName);
+            // 同步持久化 store，防止刷新后回退
+            updatePersistedFileName(fid, newName);
+            // 取消选中状态
+            deselectFileItem(item);
+            break;
         }
 
-        // 兜底：触发 SPA 软刷新
+        if (!found) {
+            // 未定位到对应项：同步持久化 store 并刷新列表
+            updatePersistedFileName(fid, newName);
+            scheduleListRefresh();
+            return;
+        }
+
+        // 防回退：React 重渲染后再次校验显示与选中状态
         setTimeout(function() {
-            if (unsafeWindow?.next?.router?.replace) {
-                unsafeWindow.next.router.replace(unsafeWindow.next.router.asPath);
-            } else if (typeof unsafeWindow.refreshNetdiskFileList === 'function') {
+            const item = findItemByFid(fid);
+            if (!item) return;
+            updateItemName(item, newName);
+            if (isItemSelected(item)) deselectFileItem(item);
+        }, 300);
+    }
+
+    /**
+     * 通过 fid/cid 在 DOM 中定位文件项
+     */
+    function findItemByFid(fid) {
+        const items = document.querySelectorAll('.file-list-item');
+        for (const item of items) {
+            const fileData = getItemFileData(item);
+            if (fileData && (String(fileData.fid) === String(fid) || String(fileData.cid) === String(fid))) {
+                return item;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 获取文件项数据：优先 React Fiber，回退到 data-index + 持久化 store
+     */
+    function getItemFileData(item) {
+        const fileData = getFileDataFromElement(item);
+        if (fileData) return fileData;
+        const dataIndex = item.getAttribute('data-index');
+        if (dataIndex !== null) {
+            const dataList = getFileListFromStorage();
+            if (dataList) return dataList[parseInt(dataIndex)] || null;
+        }
+        return null;
+    }
+
+    /**
+     * 更新文件项显示的名称
+     */
+    function updateItemName(item, newName) {
+        const nameEl = item.querySelector('.file-name-responsive');
+        if (nameEl) {
+            nameEl.textContent = newName;
+            nameEl.setAttribute('title', newName);
+        }
+    }
+
+    /**
+     * 同步更新 React Fiber 中的文件数据，防止重渲染回退
+     */
+    function updateFiberFileName(item, newName) {
+        const fiberKey = getReactFiberKey(item);
+        if (!fiberKey) return;
+        const fiber = item[fiberKey];
+        const candidates = [];
+        if (fiber?.child?.memoizedProps?.file) candidates.push(fiber.child.memoizedProps.file);
+        if (fiber?.return?.memoizedProps?.file) candidates.push(fiber.return.memoizedProps.file);
+        let current = fiber?.return;
+        for (let i = 0; i < 5 && current; i++) {
+            if (current.memoizedProps?.file) candidates.push(current.memoizedProps.file);
+            current = current.return;
+        }
+        const seen = new Set();
+        candidates.forEach(function(f) {
+            if (!seen.has(f)) {
+                seen.add(f);
+                f.n = newName;
+            }
+        });
+    }
+
+    /**
+     * 同步更新 localStorage 持久化 store 中的文件名
+     */
+    function updatePersistedFileName(fid, newName) {
+        try {
+            const fileListPersist = localStorage.getItem('115life_file_list_persist');
+            if (!fileListPersist) return;
+            const parsed = JSON.parse(fileListPersist);
+            const files = parsed.state?.files;
+            if (!Array.isArray(files)) return;
+            const target = files.find(function(f) {
+                return f && (String(f.fid) === String(fid) || String(f.cid) === String(fid));
+            });
+            if (target) {
+                target.n = newName;
+                localStorage.setItem('115life_file_list_persist', JSON.stringify(parsed));
+            }
+        } catch (e) {
+            console.log('更新持久化文件列表失败:', e);
+        }
+    }
+
+    /**
+     * 判断文件项是否处于选中状态
+     */
+    function isItemSelected(item) {
+        return item.querySelector('input[type="checkbox"]:checked') !== null
+            || item.querySelector('[aria-checked="true"]') !== null
+            || item.classList.contains('checked')
+            || item.classList.contains('selected');
+    }
+
+    /**
+     * 刷新文件列表（去抖，避免批量改名时多次刷新）
+     */
+    function scheduleListRefresh() {
+        clearTimeout(refreshTimer);
+        refreshTimer = setTimeout(function() {
+            if (typeof unsafeWindow.refreshNetdiskFileList === 'function') {
                 unsafeWindow.refreshNetdiskFileList();
             } else {
-                window.history.replaceState(null, '', window.location.href);
-                window.dispatchEvent(new PopStateEvent('popstate'));
+                location.reload();
             }
         }, 500);
     }
