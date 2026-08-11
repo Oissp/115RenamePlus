@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.1-beta.15
+// @version             0.12.1-beta.16
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -40,6 +40,7 @@
     const ICON_BUS  = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>';
     const ICON_DB   = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h6M9 15h3"/></svg>';
     const ICON_FC2  = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>';
+    const ICON_CLEAN = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z"/></svg>';
     // 悬浮按钮主图标
     const RENAME_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>';
     // 悬浮按钮样式
@@ -274,7 +275,14 @@
             });
             return item;
         };
+        const makeDivider = () => {
+            const div = document.createElement('div');
+            div.style.cssText = 'height:1px;background:#e5e7eb;margin:4px 0;';
+            return div;
+        };
 
+        menu.appendChild(mkItem('清理前缀', '移除文件名开头的引流站域名前缀', ICON_CLEAN, cleanPrefixAction));
+        menu.appendChild(makeDivider());
         menu.appendChild(mkItem('JavBus', '通过 JavBus 查询并改名', ICON_BUS, () => floatMenuAction(renameJavbus, 'javbus')));
         menu.appendChild(mkItem('JavDB', '通过 JavDB 查询并改名', ICON_DB, () => floatMenuAction(renameJavdb, 'javdb')));
         menu.appendChild(mkItem('FC2', '通过 FC2 查询并改名', ICON_FC2, () => floatMenuAction(renameFc2, 'fc2')));
@@ -516,6 +524,117 @@
             renameFromTopBar(call, site, 'video', true);
         } else {
             rename(call, site, 'video', true);
+        }
+    }
+
+    /**
+     * 清理选中文件名的引流站前缀（自动适配新旧UI，不查询外部数据库）
+     */
+    function cleanPrefixAction() {
+        if (isNewUI()) {
+            cleanPrefixFromSelected();
+        } else {
+            cleanPrefixOldUI();
+        }
+    }
+
+    /**
+     * 新版UI：清理选中文件名的引流站域名前缀，若文件名发生变化则直接改名
+     */
+    function cleanPrefixFromSelected() {
+        const selectors = [
+            '.file-list-item input[type="checkbox"]:checked',
+            '.file-list-item [aria-checked="true"]',
+            '.file-list-item.checked',
+            '.file-list-item.selected'
+        ];
+        const selectedEls = new Set();
+        selectors.forEach(sel => {
+            document.querySelectorAll(sel).forEach(el => {
+                const item = el.closest?.('.file-list-item');
+                if (item) selectedEls.add(item);
+            });
+        });
+
+        if (selectedEls.size === 0) {
+            GM_notification(getDetails('', '请先选择文件'));
+            return;
+        }
+
+        let cleanedCount = 0;
+        for (const item of selectedEls) {
+            const fileData = getFileDataFromElement(item);
+            if (!fileData) continue;
+
+            const fid = fileData.fid || fileData.cid;
+            if (!fid) continue;
+
+            // 拆分扩展名，只对主名清理前缀
+            let file_name = fileData.n;
+            const isFolder = fileData.ico === 0;
+            let suffix = '';
+            if (!isFolder && file_name) {
+                const lastDot = file_name.lastIndexOf('.');
+                if (lastDot !== -1) {
+                    suffix = file_name.substring(lastDot);
+                    file_name = file_name.substring(0, lastDot);
+                }
+            }
+
+            const cleaned = cleanDomainPrefix(file_name);
+            if (!cleaned || cleaned === file_name) continue; // 无前缀可清或清理后为空
+
+            send_115(fid, cleaned + suffix, fileData.n);
+            cleanedCount++;
+        }
+
+        if (cleanedCount === 0) {
+            GM_notification(getDetails('', '所选文件没有引流站前缀'));
+        }
+    }
+
+    /**
+     * 旧版UI：清理选中文件名的引流站域名前缀，若文件名发生变化则直接改名
+     */
+    function cleanPrefixOldUI() {
+        let list = $("iframe[rel='wangpan']").contents().find("li.selected");
+        if (list.length === 0) {
+            GM_notification(getDetails('', '请先选择文件'));
+            return;
+        }
+
+        let cleanedCount = 0;
+        list.each(function(index, v) {
+            let $item = $(v);
+            let file_name = $item.attr("title");
+            if (!file_name) return;
+            let file_type = $item.attr("file_type");
+
+            let fid;
+            let suffix = '';
+            if (file_type === "0") {
+                // 文件夹
+                fid = $item.attr("cate_id");
+            } else {
+                // 文件
+                fid = $item.attr("file_id");
+                let lastIndexOf = file_name.lastIndexOf('.');
+                if (lastIndexOf !== -1) {
+                    suffix = file_name.substring(lastIndexOf);
+                    file_name = file_name.substring(0, lastIndexOf);
+                }
+            }
+            if (!fid) return;
+
+            const cleaned = cleanDomainPrefix(file_name);
+            if (!cleaned || cleaned === file_name) return; // 无前缀可清或清理后为空
+
+            send_115(fid, cleaned + suffix, $item.attr("title"));
+            cleanedCount++;
+        });
+
+        if (cleanedCount === 0) {
+            GM_notification(getDetails('', '所选文件没有引流站前缀'));
         }
     }
 
