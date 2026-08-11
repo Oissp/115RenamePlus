@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.1-beta.14
+// @version             0.12.1-beta.15
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -17,6 +17,8 @@
 // @require             https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js
 // @grant               GM_notification
 // @grant               GM_xmlhttpRequest
+// @grant               GM_getValue
+// @grant               GM_setValue
 // @grant               unsafeWindow
 // @connect             webapi.115.com
 // @connect             javdb.com
@@ -57,8 +59,10 @@
         [data-rp-float-item] .rp-item-desc{font-size:12px;color:#6b7280;margin-top:2px}
     `;
 
-    // 悬浮按钮位置存储键（localStorage 记住拖动后的位置）
+    // 悬浮按钮位置存储键
     const FLOAT_POS_KEY = '115renameplus_float_pos';
+    // 悬浮按钮实例清理函数（避免 SPA 重建时 document 监听器累积）
+    let floatDragCleanup = null;
     
     /**
      * 添加按钮的定时任务
@@ -238,6 +242,11 @@
      * 创建悬浮按钮（独立入口，不与115已有菜单融合）
      */
     function createFloatingButton() {
+        // 清理旧实例的监听器与旧节点，避免重复创建时累积
+        if (typeof floatDragCleanup === 'function') floatDragCleanup();
+        const oldWrap = document.querySelector('[data-rp-float]');
+        if (oldWrap) oldWrap.remove();
+
         // 注入样式
         if (!document.getElementById('rp-float-style')) {
             const style = document.createElement('style');
@@ -280,6 +289,7 @@
         let dragMoved = false;
         let startX = 0, startY = 0;
         let startLeft = 0, startTop = 0;
+        let dragMaxLeft = 0, dragMaxTop = 0;
 
         toggle.addEventListener('click', function(e) {
             e.stopPropagation();
@@ -288,6 +298,10 @@
                 dragMoved = false;
                 return;
             }
+            // 展开前根据按钮位置调整菜单方向，避免菜单超出屏幕
+            if (!menu.classList.contains('rp-open')) {
+                positionFloatMenu();
+            }
             menu.classList.toggle('rp-open');
         });
 
@@ -295,19 +309,13 @@
         wrap.appendChild(toggle);
         document.body.appendChild(wrap);
 
-        // 恢复上次保存的位置
-        const savedPos = getFloatPosition();
-        if (savedPos) {
-            applyFloatPosition(savedPos.left, savedPos.top);
-        }
-
         // 点击空白处或按 Esc 关闭菜单
-        document.addEventListener('click', function(e) {
+        function onClickOutside(e) {
             if (!wrap.contains(e.target)) menu.classList.remove('rp-open');
-        });
-        document.addEventListener('keydown', function(e) {
+        }
+        function onKeyDown(e) {
             if (e.key === 'Escape') menu.classList.remove('rp-open');
-        });
+        }
 
         // 按住主按钮拖动定位
         toggle.addEventListener('mousedown', function(e) {
@@ -320,75 +328,144 @@
             const rect = wrap.getBoundingClientRect();
             startLeft = rect.left;
             startTop = rect.top;
+            // 缓存边界尺寸，避免拖动时反复读取触发 reflow
+            dragMaxLeft = Math.max(0, window.innerWidth - (wrap.offsetWidth || 140));
+            dragMaxTop = Math.max(0, window.innerHeight - (wrap.offsetHeight || 48));
             toggle.classList.add('rp-dragging');
             // 拖动时收起菜单
             menu.classList.remove('rp-open');
         });
 
-        document.addEventListener('mousemove', function(e) {
+        function onMouseMove(e) {
             if (!isDragging) return;
+            // 左键已松开（可能在窗口外释放导致 mouseup 丢失），结束拖动
+            if (!(e.buttons & 1)) {
+                isDragging = false;
+                toggle.classList.remove('rp-dragging');
+                if (dragMoved) {
+                    dragMoved = false;
+                    saveFloatPosition(Math.round(parseFloat(wrap.style.left)), Math.round(parseFloat(wrap.style.top)));
+                }
+                return;
+            }
             const dx = e.clientX - startX;
             const dy = e.clientY - startY;
             if (!dragMoved && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
                 dragMoved = true;
             }
             if (dragMoved) {
-                // 边界限制，避免拖出屏幕
-                const maxLeft = Math.max(0, window.innerWidth - (wrap.offsetWidth || 140));
-                const maxTop = Math.max(0, window.innerHeight - (wrap.offsetHeight || 48));
-                wrap.style.left = Math.min(Math.max(0, startLeft + dx), maxLeft) + 'px';
-                wrap.style.top = Math.min(Math.max(0, startTop + dy), maxTop) + 'px';
+                const pos = clampFloatPos(wrap, startLeft + dx, startTop + dy, dragMaxLeft, dragMaxTop);
+                wrap.style.left = pos.left + 'px';
+                wrap.style.top = pos.top + 'px';
                 wrap.style.right = 'auto';
                 wrap.style.bottom = 'auto';
             }
-        });
+        }
 
-        document.addEventListener('mouseup', function() {
+        function onMouseUp() {
             if (!isDragging) return;
             isDragging = false;
             toggle.classList.remove('rp-dragging');
             if (dragMoved) {
-                saveFloatPosition(parseInt(wrap.style.left), parseInt(wrap.style.top));
+                saveFloatPosition(Math.round(parseFloat(wrap.style.left)), Math.round(parseFloat(wrap.style.top)));
             }
-        });
+        }
+
+        document.addEventListener('click', onClickOutside);
+        document.addEventListener('keydown', onKeyDown);
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+
+        // 记录清理函数，重复创建时先移除旧监听器
+        floatDragCleanup = function() {
+            document.removeEventListener('click', onClickOutside);
+            document.removeEventListener('keydown', onKeyDown);
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+        };
     }
 
     /**
-     * 读取保存的悬浮按钮位置
+     * 读取保存的悬浮按钮位置（GM 存储为主，兼容旧版 localStorage）
      */
     function getFloatPosition() {
         try {
+            const pos = GM_getValue(FLOAT_POS_KEY, null);
+            if (pos && typeof pos.left === 'number' && typeof pos.top === 'number') return pos;
+        } catch (e) {}
+        try {
             const raw = localStorage.getItem(FLOAT_POS_KEY);
-            if (!raw) return null;
-            const pos = JSON.parse(raw);
-            if (typeof pos.left === 'number' && typeof pos.top === 'number') {
-                return pos;
+            if (raw) {
+                const pos = JSON.parse(raw);
+                if (typeof pos.left === 'number' && typeof pos.top === 'number') return pos;
             }
         } catch (e) {}
         return null;
     }
 
     /**
-     * 保存悬浮按钮位置
+     * 保存悬浮按钮位置（GM 存储跨 115.com 与 web.115.com 共享）
      */
     function saveFloatPosition(left, top) {
+        try {
+            GM_setValue(FLOAT_POS_KEY, { left, top });
+            return;
+        } catch (e) {}
         try {
             localStorage.setItem(FLOAT_POS_KEY, JSON.stringify({ left, top }));
         } catch (e) {}
     }
 
     /**
+     * 计算边界内的悬浮按钮位置（下界 0，上界按按钮实际尺寸钳制）
+     */
+    function clampFloatPos(wrap, left, top, maxLeft, maxTop) {
+        if (typeof maxLeft !== 'number') maxLeft = Math.max(0, window.innerWidth - (wrap.offsetWidth || 140));
+        if (typeof maxTop !== 'number') maxTop = Math.max(0, window.innerHeight - (wrap.offsetHeight || 48));
+        return {
+            left: Math.max(0, Math.min(left, maxLeft)),
+            top: Math.max(0, Math.min(top, maxTop))
+        };
+    }
+
+    /**
      * 应用悬浮按钮位置（带边界限制）
      */
-    function applyFloatPosition(left, top) {
-        const wrap = document.querySelector('[data-rp-float]');
-        if (!wrap) return;
-        const maxLeft = Math.max(0, window.innerWidth - (wrap.offsetWidth || 140));
-        const maxTop = Math.max(0, window.innerHeight - (wrap.offsetHeight || 48));
-        wrap.style.left = Math.min(left, maxLeft) + 'px';
-        wrap.style.top = Math.min(top, maxTop) + 'px';
+    function applyFloatPosition(wrap, left, top) {
+        const pos = clampFloatPos(wrap, left, top);
+        wrap.style.left = pos.left + 'px';
+        wrap.style.top = pos.top + 'px';
         wrap.style.right = 'auto';
         wrap.style.bottom = 'auto';
+    }
+
+    /**
+     * 根据按钮当前位置调整菜单弹出方向，避免菜单超出屏幕
+     */
+    function positionFloatMenu() {
+        const wrap = document.querySelector('[data-rp-float]');
+        const menu = wrap?.querySelector('[data-rp-float-menu]');
+        if (!wrap || !menu) return;
+        const rect = wrap.getBoundingClientRect();
+        const menuW = menu.offsetWidth || 230;
+        // 垂直：下方空间更足或上方不足时向下展开，否则保持默认向上
+        const spaceAbove = rect.top;
+        const spaceBelow = window.innerHeight - rect.bottom;
+        if (spaceBelow >= spaceAbove) {
+            menu.style.top = 'calc(100% + 12px)';
+            menu.style.bottom = 'auto';
+        } else {
+            menu.style.top = 'auto';
+            menu.style.bottom = 'calc(100% + 12px)';
+        }
+        // 水平：左侧空间不足时改为左对齐，避免菜单向左溢出屏幕
+        if (rect.left < menuW + 12) {
+            menu.style.left = '0';
+            menu.style.right = 'auto';
+        } else {
+            menu.style.left = 'auto';
+            menu.style.right = '0';
+        }
     }
 
     /**
@@ -409,6 +486,15 @@
             return;
         }
         wrap.style.display = 'block';
+
+        // 按钮首次显示后恢复保存的位置（此时尺寸真实，钳制才准确）
+        if (wrap.getAttribute('data-rp-float-restored') !== 'true') {
+            wrap.setAttribute('data-rp-float-restored', 'true');
+            const savedPos = getFloatPosition();
+            if (savedPos) {
+                applyFloatPosition(wrap, savedPos.left, savedPos.top);
+            }
+        }
 
         // 更新选中数量徽标
         const count = getSelectedCount();
