@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.1-beta.13
+// @version             0.12.1-beta.14
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -43,7 +43,8 @@
     // 悬浮按钮样式
     const FLOAT_STYLE = `
         [data-rp-float]{position:fixed;right:20px;bottom:80px;z-index:2147483647;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;-webkit-user-select:none;user-select:none}
-        [data-rp-float-toggle]{display:flex;align-items:center;gap:8px;padding:10px 18px;border:none;border-radius:999px;cursor:pointer;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;font-size:14px;font-weight:600;line-height:1;box-shadow:0 4px 16px rgba(37,99,235,.35);transition:transform .15s,box-shadow .15s,background .15s}
+        [data-rp-float-toggle]{display:flex;align-items:center;gap:8px;padding:10px 18px;border:none;border-radius:999px;cursor:grab;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;font-size:14px;font-weight:600;line-height:1;box-shadow:0 4px 16px rgba(37,99,235,.35);transition:transform .15s,box-shadow .15s,background .15s}
+        [data-rp-float-toggle].rp-dragging{cursor:grabbing}
         [data-rp-float-toggle]:hover{transform:translateY(-2px);box-shadow:0 6px 22px rgba(37,99,235,.5)}
         [data-rp-float-toggle].rp-active{background:linear-gradient(135deg,#f97316,#ef4444);box-shadow:0 4px 16px rgba(249,115,22,.4)}
         [data-rp-float-toggle].rp-active:hover{box-shadow:0 6px 22px rgba(249,115,22,.5)}
@@ -55,6 +56,9 @@
         [data-rp-float-item] .rp-item-title{font-size:14px;font-weight:600;color:#111827}
         [data-rp-float-item] .rp-item-desc{font-size:12px;color:#6b7280;margin-top:2px}
     `;
+
+    // 悬浮按钮位置存储键（localStorage 记住拖动后的位置）
+    const FLOAT_POS_KEY = '115renameplus_float_pos';
     
     /**
      * 添加按钮的定时任务
@@ -270,14 +274,32 @@
         const toggle = document.createElement('button');
         toggle.setAttribute('data-rp-float-toggle', 'true');
         toggle.innerHTML = RENAME_ICON + '<span>改名</span><span data-rp-float-count>0</span>';
+
+        // 拖动定位状态
+        let isDragging = false;
+        let dragMoved = false;
+        let startX = 0, startY = 0;
+        let startLeft = 0, startTop = 0;
+
         toggle.addEventListener('click', function(e) {
             e.stopPropagation();
+            // 拖动结束后的 click 不展开菜单
+            if (dragMoved) {
+                dragMoved = false;
+                return;
+            }
             menu.classList.toggle('rp-open');
         });
 
         wrap.appendChild(menu);
         wrap.appendChild(toggle);
         document.body.appendChild(wrap);
+
+        // 恢复上次保存的位置
+        const savedPos = getFloatPosition();
+        if (savedPos) {
+            applyFloatPosition(savedPos.left, savedPos.top);
+        }
 
         // 点击空白处或按 Esc 关闭菜单
         document.addEventListener('click', function(e) {
@@ -286,6 +308,87 @@
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') menu.classList.remove('rp-open');
         });
+
+        // 按住主按钮拖动定位
+        toggle.addEventListener('mousedown', function(e) {
+            if (e.button !== 0) return; // 仅左键
+            e.preventDefault();
+            isDragging = true;
+            dragMoved = false;
+            startX = e.clientX;
+            startY = e.clientY;
+            const rect = wrap.getBoundingClientRect();
+            startLeft = rect.left;
+            startTop = rect.top;
+            toggle.classList.add('rp-dragging');
+            // 拖动时收起菜单
+            menu.classList.remove('rp-open');
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!isDragging) return;
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            if (!dragMoved && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+                dragMoved = true;
+            }
+            if (dragMoved) {
+                // 边界限制，避免拖出屏幕
+                const maxLeft = Math.max(0, window.innerWidth - (wrap.offsetWidth || 140));
+                const maxTop = Math.max(0, window.innerHeight - (wrap.offsetHeight || 48));
+                wrap.style.left = Math.min(Math.max(0, startLeft + dx), maxLeft) + 'px';
+                wrap.style.top = Math.min(Math.max(0, startTop + dy), maxTop) + 'px';
+                wrap.style.right = 'auto';
+                wrap.style.bottom = 'auto';
+            }
+        });
+
+        document.addEventListener('mouseup', function() {
+            if (!isDragging) return;
+            isDragging = false;
+            toggle.classList.remove('rp-dragging');
+            if (dragMoved) {
+                saveFloatPosition(parseInt(wrap.style.left), parseInt(wrap.style.top));
+            }
+        });
+    }
+
+    /**
+     * 读取保存的悬浮按钮位置
+     */
+    function getFloatPosition() {
+        try {
+            const raw = localStorage.getItem(FLOAT_POS_KEY);
+            if (!raw) return null;
+            const pos = JSON.parse(raw);
+            if (typeof pos.left === 'number' && typeof pos.top === 'number') {
+                return pos;
+            }
+        } catch (e) {}
+        return null;
+    }
+
+    /**
+     * 保存悬浮按钮位置
+     */
+    function saveFloatPosition(left, top) {
+        try {
+            localStorage.setItem(FLOAT_POS_KEY, JSON.stringify({ left, top }));
+        } catch (e) {}
+    }
+
+    /**
+     * 应用悬浮按钮位置（带边界限制）
+     */
+    function applyFloatPosition(left, top) {
+        const wrap = document.querySelector('[data-rp-float]');
+        if (!wrap) return;
+        const maxLeft = Math.max(0, window.innerWidth - (wrap.offsetWidth || 140));
+        const maxTop = Math.max(0, window.innerHeight - (wrap.offsetHeight || 48));
+        wrap.style.left = Math.min(left, maxLeft) + 'px';
+        wrap.style.top = Math.min(top, maxTop) + 'px';
+        wrap.style.right = 'auto';
+        wrap.style.bottom = 'auto';
     }
 
     /**
