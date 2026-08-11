@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.1-beta.12
+// @version             0.12.1-beta.13
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -34,15 +34,27 @@
 (function () {
     'use strict';
 
-    // 顶部操作栏按钮样式
-    let rename_btn_class = "flex items-center gap-1.5 px-3 py-1.5 text-xs lg:text-sm xl:text-base rounded transition-colors whitespace-nowrap flex-shrink-0 text-gray-700 hover:bg-blue-500 hover:text-white";
-    // 悬浮菜单按钮样式
-    let hover_btn_class = "flex items-center space-x-1 px-3 py-0.5 text-xs hover:bg-blue-50 text-gray-700 transition-colors cursor-pointer";
-
     // 按钮图标（共用）
     const ICON_BUS  = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>';
     const ICON_DB   = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h6M9 15h3"/></svg>';
     const ICON_FC2  = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>';
+    // 悬浮按钮主图标
+    const RENAME_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>';
+    // 悬浮按钮样式
+    const FLOAT_STYLE = `
+        [data-rp-float]{position:fixed;right:20px;bottom:80px;z-index:2147483647;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;-webkit-user-select:none;user-select:none}
+        [data-rp-float-toggle]{display:flex;align-items:center;gap:8px;padding:10px 18px;border:none;border-radius:999px;cursor:pointer;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;font-size:14px;font-weight:600;line-height:1;box-shadow:0 4px 16px rgba(37,99,235,.35);transition:transform .15s,box-shadow .15s,background .15s}
+        [data-rp-float-toggle]:hover{transform:translateY(-2px);box-shadow:0 6px 22px rgba(37,99,235,.5)}
+        [data-rp-float-toggle].rp-active{background:linear-gradient(135deg,#f97316,#ef4444);box-shadow:0 4px 16px rgba(249,115,22,.4)}
+        [data-rp-float-toggle].rp-active:hover{box-shadow:0 6px 22px rgba(249,115,22,.5)}
+        [data-rp-float-count]{min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:rgba(255,255,255,.25);display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:600}
+        [data-rp-float-menu]{position:absolute;right:0;bottom:calc(100% + 12px);min-width:230px;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.15);padding:6px;display:none}
+        [data-rp-float-menu].rp-open{display:block}
+        [data-rp-float-item]{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border:none;background:transparent;border-radius:8px;cursor:pointer;text-align:left;transition:background .12s}
+        [data-rp-float-item]:hover{background:#f3f4f6}
+        [data-rp-float-item] .rp-item-title{font-size:14px;font-weight:600;color:#111827}
+        [data-rp-float-item] .rp-item-desc{font-size:12px;color:#6b7280;margin-top:2px}
+    `;
     
     /**
      * 添加按钮的定时任务
@@ -177,132 +189,147 @@
     }
 
     /**
-     * 添加按钮定时任务(检测到可以添加时添加按钮)
-     * 同时支持新版和旧版UI
+     * 添加按钮定时任务（统一由悬浮按钮入口触发）
      */
     function buttonInterval() {
-        if (isNewUI()) {
-            // 新版UI：检测操作栏
-            buttonIntervalNewUI();
-        } else {
-            // 旧版UI：检测右键菜单
-            buttonIntervalOldUI();
-        }
+        updateFloatingButton();
     }
 
     /**
-     * 新版UI按钮注入（注入到选中文件的顶部操作栏）
+     * 检测是否处于文件管理页面
      */
-    function buttonIntervalNewUI() {
-        // 查找选中文件的顶部操作栏
-        const actionBar = findSelectedFileActionBar();
-
-        if (!actionBar) {
-            return; // 还没选文件或操作栏没找到，继续轮询
-        }
-
-        if (!actionBar.getAttribute('data-rename-buttons-injected')) {
-            injectButtonsToActionBar(actionBar);
-            actionBar.setAttribute('data-rename-buttons-injected', 'true');
-        }
-
-        // 同时处理悬浮菜单（备选方案）
-        injectButtonsToHoverMenus();
+    function isOnFilePage() {
+        if (/\/storage\/netdisk/.test(location.href)) return true;
+        return document.querySelector('.file-list-item') !== null
+            || document.querySelector('iframe[rel="wangpan"]') !== null;
     }
-    
+
     /**
-     * 查找选中文件的顶部操作栏
+     * 获取当前已选中的文件数量（兼容新旧UI）
      */
-    function findSelectedFileActionBar() {
-        // 方式1：通过"已选中 N 项"文案定位（多选时通常会显示该计数文案）
-        // 只在 sticky/fixed 定位的容器内搜索 span，避免遍历全部 div
-        const candidates = document.querySelectorAll('span, [class*="sticky"] span, [class*="fixed"] span');
-        for (const span of candidates) {
-            const text = span.textContent || '';
-            if (!/已选中\s*\d+\s*项/.test(text) || text.length > 30) continue;
-            // 向上查找包含多个按钮的操作栏容器
-            let container = span;
-            for (let i = 0; i < 6; i++) {
-                container = container.parentElement;
-                if (!container) break;
-                if (container.querySelectorAll('button').length >= 5) {
-                    return container;
-                }
+    function getSelectedCount() {
+        // 旧版UI：从 iframe 中统计
+        if (!isNewUI()) {
+            try {
+                return $("iframe[rel='wangpan']").contents().find("li.selected").length;
+            } catch (e) {
+                return 0;
             }
         }
+        // 新版UI：统计选中项（去重）
+        const items = new Set();
+        document.querySelectorAll(
+            '.file-list-item input[type="checkbox"]:checked,' +
+            '.file-list-item [aria-checked="true"],' +
+            '.file-list-item.checked,' +
+            '.file-list-item.selected'
+        ).forEach(el => {
+            const item = el.closest?.('.file-list-item');
+            if (item) items.add(item);
+        });
+        return items.size;
+    }
 
-        // 方式2：单选文件时可能不显示"已选中 N 项"计数文案，改为直接从
-        // "重命名"按钮向上查找操作栏容器（单选时该按钮通常会出现）
-        const allButtons = document.querySelectorAll('button');
-        for (const btn of allButtons) {
-            const text = (btn.innerText || btn.title || '').trim();
-            if (text !== '重命名') continue;
-            let container = btn.parentElement;
-            for (let i = 0; i < 6 && container; i++) {
-                if (container.querySelectorAll('button').length >= 3) {
-                    return container;
-                }
-                container = container.parentElement;
-            }
+    /**
+     * 创建悬浮按钮（独立入口，不与115已有菜单融合）
+     */
+    function createFloatingButton() {
+        // 注入样式
+        if (!document.getElementById('rp-float-style')) {
+            const style = document.createElement('style');
+            style.id = 'rp-float-style';
+            style.textContent = FLOAT_STYLE;
+            document.head.appendChild(style);
         }
 
-        return null;
-    }
-    
-    /**
-     * 在顶部操作栏注入按钮
-     */
-    function injectButtonsToActionBar(actionBar) {
-        // 隐藏不需要的按钮
-        hideButtonsByText(actionBar, ['标签', '备注', '分享']);
-        
-        // 找到"重命名"按钮
-        const renameBtn = findButtonByText(actionBar, '重命名');
-        
-        
-        // 创建改名按钮
-        const createButton = (text, color, icon) => {
-            const btn = document.createElement('button');
-            btn.className = rename_btn_class;
-            btn.innerHTML = `${icon}<span>${text}</span>`;
-            btn.setAttribute('data-rename-btn', 'true');
-            return btn;
+        const wrap = document.createElement('div');
+        wrap.setAttribute('data-rp-float', 'true');
+        wrap.style.display = 'none';
+
+        // 下拉菜单
+        const menu = document.createElement('div');
+        menu.setAttribute('data-rp-float-menu', 'true');
+
+        const mkItem = (title, desc, icon, onClick) => {
+            const item = document.createElement('button');
+            item.setAttribute('data-rp-float-item', 'true');
+            item.innerHTML = `${icon}<span><span class="rp-item-title">${title}</span><br><span class="rp-item-desc">${desc}</span></span>`;
+            item.addEventListener('click', function(e) {
+                e.stopPropagation();
+                menu.classList.remove('rp-open');
+                onClick();
+            });
+            return item;
         };
-        
-        // JavBus 按钮
-        const javbusBtn = createButton('JavBus', '#f97316', ICON_BUS);
-        javbusBtn.addEventListener('click', function(e) {
+
+        menu.appendChild(mkItem('JavBus', '通过 JavBus 查询并改名', ICON_BUS, () => floatMenuAction(renameJavbus, 'javbus')));
+        menu.appendChild(mkItem('JavDB', '通过 JavDB 查询并改名', ICON_DB, () => floatMenuAction(renameJavdb, 'javdb')));
+        menu.appendChild(mkItem('FC2', '通过 FC2 查询并改名', ICON_FC2, () => floatMenuAction(renameFc2, 'fc2')));
+
+        // 主按钮
+        const toggle = document.createElement('button');
+        toggle.setAttribute('data-rp-float-toggle', 'true');
+        toggle.innerHTML = RENAME_ICON + '<span>改名</span><span data-rp-float-count>0</span>';
+        toggle.addEventListener('click', function(e) {
             e.stopPropagation();
-            renameFromTopBar(renameJavbus, 'javbus', 'video', true);
-        });
-        
-        // JavDB 按钮
-        const javdbBtn = createButton('JavDB', '#3b82f6', ICON_DB);
-        javdbBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            renameFromTopBar(renameJavdb, 'javdb', 'video', true);
+            menu.classList.toggle('rp-open');
         });
 
-        // FC2 按钮
-        const fc2Btn = createButton('FC2', '#a855f7', ICON_FC2);
-        fc2Btn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            renameFromTopBar(renameFc2, 'fc2', 'video', true);
+        wrap.appendChild(menu);
+        wrap.appendChild(toggle);
+        document.body.appendChild(wrap);
+
+        // 点击空白处或按 Esc 关闭菜单
+        document.addEventListener('click', function(e) {
+            if (!wrap.contains(e.target)) menu.classList.remove('rp-open');
         });
-        
-        // 在"重命名"后面插入
-        if (renameBtn) {
-            renameBtn.after(fc2Btn);
-            renameBtn.after(javdbBtn);
-            renameBtn.after(javbusBtn);
-        } else {
-            actionBar.appendChild(javbusBtn);
-            actionBar.appendChild(javdbBtn);
-            actionBar.appendChild(fc2Btn);
-        }
-        
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') menu.classList.remove('rp-open');
+        });
     }
-    
+
+    /**
+     * 更新悬浮按钮（显示/隐藏、选中数量）
+     */
+    function updateFloatingButton() {
+        let wrap = document.querySelector('[data-rp-float]');
+        if (!wrap) {
+            if (!isOnFilePage()) return;
+            createFloatingButton();
+            wrap = document.querySelector('[data-rp-float]');
+            if (!wrap) return;
+        }
+
+        // 不在文件页时隐藏
+        if (!isOnFilePage()) {
+            wrap.style.display = 'none';
+            return;
+        }
+        wrap.style.display = 'block';
+
+        // 更新选中数量徽标
+        const count = getSelectedCount();
+        const badge = wrap.querySelector('[data-rp-float-count]');
+        if (badge) {
+            badge.textContent = count;
+            badge.style.display = count > 0 ? 'inline-flex' : 'none';
+        }
+        // 主按钮选中状态高亮
+        const toggle = wrap.querySelector('[data-rp-float-toggle]');
+        if (toggle) toggle.classList.toggle('rp-active', count > 0);
+    }
+
+    /**
+     * 悬浮按钮菜单触发改名（自动适配新旧UI）
+     */
+    function floatMenuAction(call, site) {
+        if (isNewUI()) {
+            renameFromTopBar(call, site, 'video', true);
+        } else {
+            rename(call, site, 'video', true);
+        }
+    }
+
     /**
      * 从顶部操作栏触发改名
      */
@@ -388,255 +415,6 @@
     }
     
     /**
-     * 查找文件项的悬浮菜单（或操作区）
-     */
-    function findHoverMenu(item) {
-        // 找 .group 内的 flex 行容器（文件行主体），按钮将插入其中
-        const groupDiv = item.querySelector('.group') || item;
-        const flexRow = groupDiv.querySelector(':scope > .flex.items-center');
-        return flexRow || groupDiv;
-    }
-
-    /**
-     * 查找或创建悬浮按钮容器
-     */
-    function findBtnContainer(hoverMenu) {
-        // 如果已有我们创建的容器，直接复用
-        let existing = hoverMenu.querySelector('[data-rename-menu]');
-        if (existing) return existing;
-
-        // 查找原生的悬浮操作按钮容器
-        let container = hoverMenu.querySelector('[class*="group-hover"][class*="flex"]');
-        if (container && !container.classList.contains('file-list-item') && container.querySelectorAll('button').length >= 1) {
-            return container;
-        }
-
-        // 没有现成容器，创建一个 hover 时才显示的按钮组
-        const btnGroup = document.createElement('div');
-        btnGroup.className = 'hidden group-hover:flex items-center absolute right-8 top-1/2 -translate-y-1/2 bg-white rounded-md shadow-sm z-10 gap-0.5 px-1';
-        btnGroup.setAttribute('data-rename-menu', 'true');
-        // 确保父容器相对定位
-        if (!hoverMenu.classList.contains('relative')) {
-            hoverMenu.style.position = 'relative';
-        }
-        hoverMenu.appendChild(btnGroup);
-        return btnGroup;
-    }
-
-    /**
-     * 在悬浮菜单中注入按钮（备选方案）
-     */
-    function injectButtonsToHoverMenus() {
-        const fileItems = document.querySelectorAll('.file-list-item');
-
-        fileItems.forEach((item) => {
-            if (item.getAttribute('data-rename-buttons-injected') === 'true') {
-                return;
-            }
-
-            const nameEl = item.querySelector('.file-name-responsive');
-            const fileName = nameEl?.getAttribute('title') || nameEl?.innerText;
-            if (!fileName) return;
-
-            const hoverMenu = findHoverMenu(item);
-            if (!hoverMenu) return;
-
-            const btnContainer = findBtnContainer(hoverMenu);
-            if (!btnContainer) return;
-            
-            
-            // JavBus 按钮
-            const javbusBtn = document.createElement('button');
-            javbusBtn.className = hover_btn_class;
-            javbusBtn.innerHTML = ICON_BUS + '<span style="font-size:14px;">JavBus</span>';
-            javbusBtn.title = '通过JavBus改名';
-            javbusBtn.addEventListener('click', function(e) {
-                e.stopPropagation();
-                renameFromHoverMenuByFileName(fileName, renameJavbus, 'javbus', 'video', true);
-            });
-            
-            // JavDB 按钮
-            const javdbBtn = document.createElement('button');
-            javdbBtn.className = hover_btn_class;
-            javdbBtn.innerHTML = ICON_DB + '<span style="font-size:14px;">JavDB</span>';
-            javdbBtn.title = '通过JavDB改名';
-            javdbBtn.addEventListener('click', function(e) {
-                e.stopPropagation();
-                renameFromHoverMenuByFileName(fileName, renameJavdb, 'javdb', 'video', true);
-            });
-            
-            // FC2 按钮
-            const fc2Btn = document.createElement('button');
-            fc2Btn.className = hover_btn_class;
-            fc2Btn.innerHTML = ICON_FC2 + '<span style="font-size:14px;">FC2</span>';
-            fc2Btn.title = '通过FC2改名';
-            fc2Btn.addEventListener('click', function(e) {
-                e.stopPropagation();
-                renameFromHoverMenuByFileName(fileName, renameFc2, 'fc2', 'video', true);
-            });
-            
-            // 添加到容器末尾
-            btnContainer.appendChild(javbusBtn);
-            btnContainer.appendChild(javdbBtn);
-            btnContainer.appendChild(fc2Btn);
-            
-            item.setAttribute('data-rename-buttons-injected', 'true');
-        });
-        
-        // MutationObserver
-        if (!window.__115RenamePlusObserverSet) {
-            setupMutationObserver();
-            window.__115RenamePlusObserverSet = true;
-        }
-    }
-    
-    /**
-     * 隐藏指定文本的按钮
-     */
-    function hideButtonsByText(container, texts) {
-        const buttons = container.querySelectorAll('button');
-        buttons.forEach(btn => {
-            const text = (btn.innerText || btn.title || '').trim();
-            if (texts.includes(text)) {
-                // 隐藏按钮及其父容器
-                const parent = btn.parentElement;
-                if (parent && parent.classList.contains('relative')) {
-                    parent.style.display = 'none';
-                } else {
-                    btn.style.display = 'none';
-                }
-            }
-        });
-    }
-    
-    /**
-     * 查找指定文本的按钮
-     */
-    function findButtonByText(container, text) {
-        const buttons = container.querySelectorAll('button');
-        for (const btn of buttons) {
-            if ((btn.innerText || btn.title || '').trim() === text) {
-                return btn;
-            }
-        }
-        return null;
-    }
-    
-    /**
-     * 在元素后面插入
-     */
-    function insertAfter(targetElement, newElement) {
-        if (!targetElement || !newElement) return false;
-        const parent = targetElement.parentNode;
-        if (!parent) return false;
-        if (targetElement.nextSibling) {
-            parent.insertBefore(newElement, targetElement.nextSibling);
-        } else {
-            parent.appendChild(newElement);
-        }
-        return true;
-    }
-    
-    /**
-     * 设置 MutationObserver 监听新增文件项
-     */
-    function setupMutationObserver() {
-        // 优先找包含 .file-list-item 的滚动容器，兜底用 #__next 或 body
-        let fileListContainer = document.querySelector('[class*="overflow-y-auto"]');
-        if (!fileListContainer) {
-            const firstItem = document.querySelector('.file-list-item');
-            fileListContainer = firstItem?.closest('[class*="overflow"]') || document.getElementById('__next') || document.body;
-        }
-        if (!fileListContainer) return;
-        
-        const observer = new MutationObserver(function(mutations) {
-            mutations.forEach(function(mutation) {
-                mutation.addedNodes.forEach(function(node) {
-                    if (node.nodeType === 1) {
-                        // 检查是否是文件项或包含文件项
-                        if (node.classList?.contains('file-list-item')) {
-                            injectButtonsToFileItem(node);
-                        }
-                        const nestedItems = node.querySelectorAll?.('.file-list-item');
-                        if (nestedItems) {
-                            nestedItems.forEach(injectButtonsToFileItem);
-                        }
-                    }
-                });
-            });
-        });
-        
-        observer.observe(fileListContainer, { childList: true, subtree: true });
-    }
-    
-    /**
-     * 给单个文件项注入按钮
-     */
-    function injectButtonsToFileItem(item) {
-        // 只处理文件列表项
-        if (!item.classList?.contains('file-list-item')) return;
-
-        if (item.getAttribute('data-rename-buttons-injected') === 'true') {
-            return;
-        }
-        
-        // 获取文件名
-        const nameEl = item.querySelector('.file-name-responsive');
-        const fileName = nameEl?.getAttribute('title') || nameEl?.innerText;
-        if (!fileName) return;
-        
-        const hoverMenu = findHoverMenu(item);
-        if (!hoverMenu) return;
-
-        const btnContainer = findBtnContainer(hoverMenu);
-        if (!btnContainer) return;
-        
-        // 隐藏不需要的按钮
-        hideButtonsByText(btnContainer, ['标签', '备注', '分享']);
-        
-        // 找到"重命名"按钮
-        const renameBtn = findButtonByText(btnContainer, '重命名');
-        
-        
-        // JavBus 按钮 - 橙色图标
-        const javbusBtn = document.createElement('button');
-        javbusBtn.className = hover_btn_class;
-        javbusBtn.innerHTML = ICON_BUS + '<span style="font-size:14px;">JavBus</span>';
-        javbusBtn.title = '通过JavBus改名';
-        javbusBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            renameFromHoverMenuByFileName(fileName, renameJavbus, 'javbus', 'video', true);
-        });
-
-        // JavDB 按钮 - 蓝色图标
-        const javdbBtn = document.createElement('button');
-        javdbBtn.className = hover_btn_class;
-        javdbBtn.innerHTML = ICON_DB + '<span style="font-size:14px;">JavDB</span>';
-        javdbBtn.title = '通过JavDB改名';
-        javdbBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            renameFromHoverMenuByFileName(fileName, renameJavdb, 'javdb', 'video', true);
-        });
-
-        // FC2 按钮 - 紫色图标
-        const fc2Btn = document.createElement('button');
-        fc2Btn.className = hover_btn_class;
-        fc2Btn.innerHTML = ICON_FC2 + '<span style="font-size:14px;">FC2</span>';
-        fc2Btn.title = '通过FC2改名';
-        fc2Btn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            renameFromHoverMenuByFileName(fileName, renameFc2, 'fc2', 'video', true);
-        });
-        
-        // 在"重命名"按钮后面插入
-        insertAfter(renameBtn, javbusBtn);
-        insertAfter(javbusBtn, javdbBtn);
-        insertAfter(javdbBtn, fc2Btn);
-        
-        item.setAttribute('data-rename-buttons-injected', 'true');
-    }
-    
-    /**
      * 从hover菜单触发改名（通过文件名匹配，使用 API 获取正确的 fid）
      */
     async function renameFromHoverMenuByFileName(fileName, call, site, rntype, ifAddDate) {
@@ -701,37 +479,6 @@
     }
 
     /**
-     * 旧版UI按钮注入（保留兼容）
-     */
-    function buttonIntervalOldUI() {
-        let open_dir = $("div#js_float_content li[val='open_dir']");
-        if (open_dir.length !== 0 && $("li#rename_list").length === 0) {
-            let rename_list = `
-                    <li id="rename_list">
-                        <a id="rename_video_javbus" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名javbus</span></a>
-                        <a id="rename_video_javdb" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名javdb</span></a>
-                        <a id="rename_video_FC2" class="mark" href="javascript:;"><i class="icon-operate ifo-video-play"></i><span>视频改名FC2</span></a>
-                    </li>
-                `;
-            open_dir.before(rename_list);
-			$("a#rename_video_javbus").click(
-			    function () {
-			        rename(renameJavbus, "javbus", "video", true);
-			    });	
-			$("a#rename_video_javdb").click(
-			    function () {
-			        rename(renameJavdb, "javdb", "video", true);
-			    });	
-			$("a#rename_video_FC2").click(
-			    function () {
-			        rename(renameFc2, "fc2", "video", true);
-			    });	
-
-            // 结束定时任务
-            clearInterval(interval);
-        }
-    }
-
     /**
      * 执行改名方法
      * @param call       回调函数
