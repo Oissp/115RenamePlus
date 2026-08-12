@@ -1255,8 +1255,8 @@
         requestFC2(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, Fc2Search);
     }
     function requestFC2(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, searchUrl) {
-        // 从 fh 中提取纯数字编号（如 FC2-PPV-745325-C -> 745325）
-        let fc2Num = fh.match(/FC2[-_ ]?PPV[-_ ]?(\d{5,8})/i);
+        // 从 fh 中提取纯数字编号（如 FC2-PPV-745325-C / FC2-745325-C -> 745325）
+        let fc2Num = fh.match(/FC2[-_ ]?(?:PPV[-_ ]?)?(\d{5,8})/i);
         if (!fc2Num) {
             // 兜底：如果 fh 本身就是数字
             fc2Num = [null, fh.replace(/[^0-9]/g, "")];
@@ -1302,8 +1302,8 @@
 						date="";
 					}
 				}				
-                // 构建标准番号格式
-                let standardFh = "FC2-PPV-" + fc2Id;
+                // 构建标准番号格式（与 JavDB 保持一致：FC2-xxxxxx，去掉 PPV）
+                let standardFh = "FC2-" + fc2Id;
                 // 如果原 fh 里有 -C 标记，加回去
                 if (/-C$/i.test(fh)) {
                     standardFh += "-C";
