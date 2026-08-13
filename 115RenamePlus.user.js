@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.1-beta.17
+// @version             0.12.1-beta.18
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -46,18 +46,18 @@
     // 悬浮按钮样式
     const FLOAT_STYLE = `
         [data-rp-float]{position:fixed;right:20px;bottom:80px;z-index:2147483647;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;-webkit-user-select:none;user-select:none}
-        [data-rp-float-toggle]{display:flex;align-items:center;gap:8px;padding:10px 18px;border:none;border-radius:999px;cursor:grab;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;font-size:14px;font-weight:600;line-height:1;box-shadow:0 4px 16px rgba(37,99,235,.35);transition:transform .15s,box-shadow .15s,background .15s}
-        [data-rp-float-toggle].rp-dragging{cursor:grabbing}
-        [data-rp-float-toggle]:hover{transform:translateY(-2px);box-shadow:0 6px 22px rgba(37,99,235,.5)}
-        [data-rp-float-toggle].rp-active{background:linear-gradient(135deg,#f97316,#ef4444);box-shadow:0 4px 16px rgba(249,115,22,.4)}
-        [data-rp-float-toggle].rp-active:hover{box-shadow:0 6px 22px rgba(249,115,22,.5)}
-        [data-rp-float-count]{min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:rgba(255,255,255,.25);display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:600}
+        html body [data-rp-float-toggle]{display:flex!important;align-items:center!important;gap:8px!important;padding:10px 18px!important;border:none!important;border-radius:999px!important;cursor:grab;background:linear-gradient(135deg,#2563eb,#7c3aed)!important;color:#fff!important;font-size:14px!important;font-weight:600!important;line-height:1!important;box-shadow:0 4px 16px rgba(37,99,235,.35)!important;transition:transform .15s,box-shadow .15s,background .15s}
+        html body [data-rp-float-toggle].rp-dragging{cursor:grabbing!important}
+        html body [data-rp-float-toggle]:hover{transform:translateY(-2px)!important;box-shadow:0 6px 22px rgba(37,99,235,.5)!important}
+        html body [data-rp-float-toggle].rp-active{background:linear-gradient(135deg,#f97316,#ef4444)!important;box-shadow:0 4px 16px rgba(249,115,22,.4)!important}
+        html body [data-rp-float-toggle].rp-active:hover{box-shadow:0 6px 22px rgba(249,115,22,.5)!important}
+        html body [data-rp-float-count]{min-width:20px!important;height:20px!important;padding:0 5px!important;border-radius:10px!important;background:rgba(255,255,255,.25)!important;display:inline-flex;align-items:center!important;justify-content:center!important;font-size:12px!important;font-weight:600!important}
         [data-rp-float-menu]{position:absolute;right:0;bottom:calc(100% + 12px);min-width:230px;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.15);padding:6px;display:none}
         [data-rp-float-menu].rp-open{display:block}
-        [data-rp-float-item]{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border:none;background:transparent;border-radius:8px;cursor:pointer;text-align:left;transition:background .12s}
-        [data-rp-float-item]:hover{background:#f3f4f6}
-        [data-rp-float-item] .rp-item-title{font-size:14px;font-weight:600;color:#111827}
-        [data-rp-float-item] .rp-item-desc{font-size:12px;color:#6b7280;margin-top:2px}
+        html body [data-rp-float-item]{display:flex!important;align-items:center!important;gap:10px!important;width:100%!important;padding:9px 12px!important;border:none!important;background:transparent!important;border-radius:8px!important;cursor:pointer!important;text-align:left!important;transition:background .12s}
+        html body [data-rp-float-item]:hover{background:#f3f4f6!important}
+        html body [data-rp-float-item] .rp-item-title{font-size:14px;font-weight:600;color:#111827}
+        html body [data-rp-float-item] .rp-item-desc{font-size:12px;color:#6b7280;margin-top:2px}
     `;
 
     // 悬浮按钮位置存储键
