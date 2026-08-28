@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.1-beta.18
+// @version             0.12.1-beta.19
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
@@ -1865,8 +1865,9 @@
 				}
 			}
 			if (!t) {
-				// 东京热
-				t = title.match(/N[-_]\d{4}/);
+				// 东京热（N 前必须是边界，否则会误匹配 MAAN-1190 内部的 N-1190）
+				let mTokyo = title.match(/(?:^|[^A-Z0-9])(N[-_]\d{4})/);
+				if (mTokyo) t = mTokyo[1];
 			}
 			if (!t) {
 				// Jukujo-Club | 熟女俱乐部
