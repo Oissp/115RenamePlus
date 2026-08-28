@@ -2,6 +2,8 @@
 // @name         115云盘磁力链接助手 (自定义路径版)
 // @namespace    http://tampermonkey.net/
 // @version      2.1.0-beta.1
+// @updateURL    https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115magnetlink.user.js
+// @downloadURL  https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115magnetlink.user.js
 // @description  自动捕捉页面磁力链接并保存至115云盘，支持文件夹层级浏览、添加文件夹书签(收藏夹)
 // @author       UMP45NOSE
 // @license      MIT
