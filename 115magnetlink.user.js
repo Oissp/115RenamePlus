@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         115云盘磁力链接助手 (自定义路径版)
 // @namespace    http://tampermonkey.net/
-// @version      2.1.0-beta.1
+// @version      2.1.0-beta.2
 // @updateURL    https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115magnetlink.user.js
 // @downloadURL  https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115magnetlink.user.js
 // @description  自动捕捉页面磁力链接并保存至115云盘，支持文件夹层级浏览、添加文件夹书签(收藏夹)
@@ -22,7 +22,7 @@
 (function() {
     'use strict';
 
-    console.log('115云盘磁力链接助手已加载 (v2.1.0-beta.1)');
+    console.log('115云盘磁力链接助手已加载 (v2.1.0-beta.2)');
 
     // 调试函数
     function debug(msg, ...args) {
@@ -40,14 +40,14 @@
     </svg>`;
 
     // 按钮样式
-    const buttonStyle = `
+    // 按钮基础样式（圆角胶囊，「选择」「上次」两个按钮共用）
+    const btnBaseStyle = `
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 26px;
         height: 26px;
-        background-color: #2777F8;
-        border-radius: 50%;
+        padding: 0 8px;
+        border-radius: 13px;
         cursor: pointer;
         margin-left: 5px;
         color: white;
@@ -61,22 +61,9 @@
         vertical-align: middle;
         z-index: 999;
     `;
-
-    // 快速保存面板样式（自包含，不依赖完整选择器弹窗的 CSS）
-    const panelCss = `
-        #magnet-115-panel{position:fixed;z-index:10001;min-width:230px;max-width:300px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.18);font-family:sans-serif;font-size:13px;overflow:hidden}
-        #magnet-115-panel .m115-panel-title{padding:10px 12px;border-bottom:1px solid #eee;background:#f8f9fa;color:#2777F8;font-weight:bold;font-size:14px}
-        #magnet-115-panel .m115-panel-body{padding:8px}
-        #magnet-115-panel .m115-panel-fast{background:#fff7e6;border-left:3px solid #ff9800;margin-bottom:6px}
-        #magnet-115-panel .m115-panel-fast:hover{background:#fff1cc}
-        #magnet-115-panel .m115-panel-more{padding:8px 10px;color:#2777F8;cursor:pointer;text-align:center;border-top:1px solid #eee;margin-top:6px}
-        #magnet-115-panel .m115-panel-more:hover{background:#f0f7ff}
-        #magnet-115-panel .m115-item{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:4px;cursor:pointer;margin-bottom:2px}
-        #magnet-115-panel .m115-item:hover{background:#f0f7ff}
-        #magnet-115-panel .m115-folder-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center}
-        #magnet-115-panel .m115-section-title{font-size:12px;color:#888;margin:10px 0 5px;padding-left:5px}
-        #magnet-115-panel .m115-hint{color:#999;font-size:12px;padding:4px 10px}
-    `;
+    // 「选择」蓝色 / 「上次」橙色
+    const btnSelectStyle = btnBaseStyle + ';background-color: #2777F8;';
+    const btnLastStyle = btnBaseStyle + ';background-color: #ff9800;';
 
     const createdButtons = new Set();
 
@@ -139,8 +126,12 @@
      * @param {string} [folderName] 目标文件夹名（用于记住上次保存位置）
      */
     async function saveTo115(magnetLink, targetFolderId, buttonElement, folderName) {
-        // UI 反馈：处理中
-        if(buttonElement) {
+        // UI 反馈：处理中（记住原始文案/颜色，保存后恢复）
+        let origText = '115';
+        let origColor = '#2777F8';
+        if (buttonElement) {
+            origText = buttonElement.textContent;
+            origColor = buttonElement.style.backgroundColor || '#2777F8';
             buttonElement.textContent = '...';
             buttonElement.style.backgroundColor = '#ff9800';
         }
@@ -189,12 +180,14 @@
                         showNotification('错误', msg);
                     }
 
+                    // 刷新「上次」按钮提示（可能刚记住了新位置）
+                    refreshLastButtons();
                     // 恢复按钮状态
                     if (buttonElement) {
-                        buttonElement.textContent = '115';
-                        buttonElement.style.backgroundColor = (success || isWarning) ? '#2777F8' : '#f44336';
+                        buttonElement.textContent = origText;
+                        buttonElement.style.backgroundColor = (success || isWarning) ? origColor : '#f44336';
                         if (!success && !isWarning) {
-                            setTimeout(() => { buttonElement.style.backgroundColor = '#2777F8'; }, 2000);
+                            setTimeout(() => { buttonElement.style.backgroundColor = origColor; }, 2000);
                         }
                     }
                     resolve(success);
@@ -202,9 +195,9 @@
                 onerror: function() {
                     showNotification('错误', '网络请求失败');
                     if (buttonElement) {
-                        buttonElement.textContent = '115';
+                        buttonElement.textContent = origText;
                         buttonElement.style.backgroundColor = '#f44336';
-                        setTimeout(() => { buttonElement.style.backgroundColor = '#2777F8'; }, 2000);
+                        setTimeout(() => { buttonElement.style.backgroundColor = origColor; }, 2000);
                     }
                     resolve(false);
                 }
@@ -242,108 +235,12 @@
         GM_setValue('115_last_save_folder', { id, name });
     }
 
-    // --- 快速保存面板 ---
-    function showQuickSavePanel(magnetLink, buttonElement) {
-        const lastFolder = getLastFolder();
-        const bookmarks = getBookmarks();
-        // 无书签且无上次位置时，直接进完整选择器，保持原有体验
-        if (!lastFolder && bookmarks.length === 0) {
-            showFolderSelector(magnetLink, buttonElement);
-            return;
-        }
-
-        // 移除旧面板（含事件监听清理）
-        const oldPanel = document.getElementById('magnet-115-panel');
-        if (oldPanel) {
-            if (oldPanel._cleanup) oldPanel._cleanup();
-            oldPanel.remove();
-        }
-
-        // 注入样式
-        if (!document.getElementById('magnet-115-panel-style')) {
-            const style = document.createElement('style');
-            style.id = 'magnet-115-panel-style';
-            style.textContent = panelCss;
-            document.head.appendChild(style);
-        }
-
-        const panel = document.createElement('div');
-        panel.id = 'magnet-115-panel';
-        panel.style.visibility = 'hidden';
-        panel.innerHTML = `
-            <div class="m115-panel-title">保存至 115云盘</div>
-            <div class="m115-panel-body">
-                <div id="m115-panel-fast"></div>
-                <div class="m115-section-title">书签 (点击直接保存)</div>
-                <div id="m115-panel-bookmarks"></div>
-                <div class="m115-panel-more" id="m115-panel-more">选择其他位置…</div>
-            </div>
-        `;
-        document.body.appendChild(panel);
-
-        // 快速保存（上次位置）
-        const elFast = panel.querySelector('#m115-panel-fast');
-        if (lastFolder && lastFolder.id != null) {
-            const div = document.createElement('div');
-            div.className = 'm115-item m115-panel-fast';
-            div.innerHTML = `<span class="m115-folder-name">⚡ 保存到「${lastFolder.name}」</span>`;
-            div.onclick = () => { close(); saveTo115(magnetLink, lastFolder.id, buttonElement, lastFolder.name); };
-            elFast.appendChild(div);
-        } else {
-            elFast.style.display = 'none';
-        }
-
-        // 书签列表
-        const elBookmarks = panel.querySelector('#m115-panel-bookmarks');
-        if (bookmarks.length === 0) {
-            elBookmarks.innerHTML = '<div class="m115-hint">暂无书签，可在选择器中收藏目录</div>';
-        } else {
-            bookmarks.forEach(b => {
-                const div = document.createElement('div');
-                div.className = 'm115-item';
-                div.innerHTML = `<span class="m115-folder-name">★ ${b.name}</span>`;
-                div.onclick = () => { close(); saveTo115(magnetLink, b.id, buttonElement, b.name); };
-                elBookmarks.appendChild(div);
-            });
-        }
-
-        // 完整选择器入口
-        panel.querySelector('#m115-panel-more').onclick = () => {
-            close();
-            showFolderSelector(magnetLink, buttonElement);
-        };
-
-        // 关闭与事件清理
-        function cleanup() {
-            document.removeEventListener('click', onDocClick, true);
-            window.removeEventListener('scroll', onScroll, true);
-            document.removeEventListener('keydown', onKey);
-        }
-        function close() {
-            cleanup();
-            panel.remove();
-        }
-        function onDocClick(e) {
-            if (!panel.contains(e.target) && e.target !== buttonElement) close();
-        }
-        function onScroll() { close(); }
-        function onKey(e) { if (e.key === 'Escape') close(); }
-
-        document.addEventListener('click', onDocClick, true);
-        window.addEventListener('scroll', onScroll, true);
-        document.addEventListener('keydown', onKey);
-        panel._cleanup = cleanup;
-
-        // 定位：优先按钮右侧，空间不足时放左侧并贴合视口
-        const btnRect = buttonElement.getBoundingClientRect();
-        panel.style.visibility = 'visible';
-        const pRect = panel.getBoundingClientRect();
-        let left = btnRect.right + 8;
-        if (left + pRect.width > window.innerWidth - 8) left = Math.max(8, btnRect.left - pRect.width - 8);
-        let top = btnRect.top;
-        if (top + pRect.height > window.innerHeight - 8) top = Math.max(8, window.innerHeight - pRect.height - 8);
-        panel.style.left = left + 'px';
-        panel.style.top = top + 'px';
+    // 刷新「上次」按钮提示：保存成功后更新为具体文件夹名
+    function refreshLastButtons() {
+        const last = getLastFolder();
+        document.querySelectorAll('[data-rp-last]').forEach(btn => {
+            btn.title = (last && last.id != null) ? `保存到「${last.name}」` : '尚未保存过位置，点击将打开位置选择器';
+        });
     }
 
     // --- UI 相关 ---
@@ -553,10 +450,18 @@
         const wrapper = document.createElement('span');
         wrapper.style.cssText = 'display: inline-flex; align-items: center; white-space: nowrap; margin: 0 2px;';
 
-        const btn = document.createElement('span');
-        btn.innerHTML = '115';
-        btn.style.cssText = buttonStyle;
-        btn.title = '点击快速保存/选择位置';
+        // 「选择」按钮：打开位置选择器
+        const btnSelect = document.createElement('span');
+        btnSelect.innerHTML = '选择';
+        btnSelect.style.cssText = btnSelectStyle;
+        btnSelect.title = '选择保存位置';
+
+        // 「上次」按钮：一键保存到上次使用的文件夹
+        const btnLast = document.createElement('span');
+        btnLast.innerHTML = '上次';
+        btnLast.style.cssText = btnLastStyle;
+        btnLast.title = '保存到上次位置';
+        btnLast.setAttribute('data-rp-last', '1');
 
         // 插入 DOM
         if (element.nodeType === Node.TEXT_NODE) {
@@ -567,22 +472,38 @@
                 range.setStart(element, index + magnetLink.length);
                 range.setEnd(element, index + magnetLink.length);
                 range.insertNode(wrapper);
-                wrapper.appendChild(btn);
+                wrapper.appendChild(btnSelect);
+                wrapper.appendChild(btnLast);
             }
         } else {
             element.parentNode.insertBefore(wrapper, element.nextSibling);
-            wrapper.appendChild(btn);
+            wrapper.appendChild(btnSelect);
+            wrapper.appendChild(btnLast);
         }
 
         // 交互
-        btn.onmouseenter = () => { btn.style.transform = 'scale(1.1)'; btn.style.opacity = '1'; };
-        btn.onmouseleave = () => { btn.style.transform = 'scale(1)'; btn.style.opacity = '0.9'; };
+        const bindHover = (btn) => {
+            btn.onmouseenter = () => { btn.style.transform = 'scale(1.1)'; btn.style.opacity = '1'; };
+            btn.onmouseleave = () => { btn.style.transform = 'scale(1)'; btn.style.opacity = '0.9'; };
+        };
+        bindHover(btnSelect);
+        bindHover(btnLast);
 
-        btn.onclick = (e) => {
+        btnSelect.onclick = (e) => {
             e.stopPropagation();
             e.preventDefault();
-            // 打开快速保存面板（无书签/上次位置时自动回退到完整选择器）
-            showQuickSavePanel(magnetLink, btn);
+            showFolderSelector(magnetLink, btnSelect);
+        };
+        btnLast.onclick = (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const last = getLastFolder();
+            if (last && last.id != null) {
+                saveTo115(magnetLink, last.id, btnLast, last.name);
+            } else {
+                // 尚无上次位置：退回位置选择器
+                showFolderSelector(magnetLink, btnLast);
+            }
         };
 
         createdButtons.add(magnetLink);
@@ -621,6 +542,7 @@
     // 启动
     function init() {
         findAndProcessMagnetLinks();
+        refreshLastButtons();
         // 监控动态加载
         new MutationObserver((mutations) => {
             // 简单的防抖
