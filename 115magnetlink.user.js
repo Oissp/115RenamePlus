@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         115云盘磁力链接助手 (自定义路径版)
+// @name         115magnetlink
 // @namespace    http://tampermonkey.net/
-// @version      2.1.0-beta.2
+// @version      2.1.0-beta.3
 // @updateURL    https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115magnetlink.user.js
 // @downloadURL  https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115magnetlink.user.js
 // @description  自动捕捉页面磁力链接并保存至115云盘，支持文件夹层级浏览、添加文件夹书签(收藏夹)
@@ -22,7 +22,7 @@
 (function() {
     'use strict';
 
-    console.log('115云盘磁力链接助手已加载 (v2.1.0-beta.2)');
+    console.log('115magnetlink 已加载 (v2.1.0-beta.3)');
 
     // 调试函数
     function debug(msg, ...args) {
@@ -32,38 +32,56 @@
     // 匹配磁力链接的正则表达式
     const magnetRegex = /magnet:\?xt=urn:btih:[a-zA-Z0-9]{32,40}/gi;
 
-    // 115图标 SVG
-    const icon115 = `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16">
-        <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central"
-            fill="white" font-family="Arial" font-weight="bold" font-size="10">115</text>
+    // 按钮图标（SVG：左侧=文件夹/选择位置，右侧=时钟/上次位置）
+    const ICON_FOLDER = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+    </svg>`;
+    const ICON_CLOCK = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <polyline points="12 6 12 12 16 14"/>
     </svg>`;
 
-    // 按钮样式
-    // 按钮基础样式（圆角胶囊，「选择」「上次」两个按钮共用）
-    const btnBaseStyle = `
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        height: 26px;
-        padding: 0 8px;
-        border-radius: 13px;
-        cursor: pointer;
-        margin-left: 5px;
-        color: white;
-        font-family: Arial, sans-serif;
-        font-size: 11px;
-        font-weight: bold;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        transition: all 0.3s ease;
-        opacity: 0.9;
-        user-select: none;
-        vertical-align: middle;
-        z-index: 999;
-    `;
-    // 「选择」蓝色 / 「上次」橙色
-    const btnSelectStyle = btnBaseStyle + ';background-color: #2777F8;';
-    const btnLastStyle = btnBaseStyle + ';background-color: #ff9800;';
+    // 药丸按钮样式：一个胶囊切分左右（左=选择保存位置/蓝，右=保存到上次位置/橙）
+    let pillCssInjected = false;
+    function ensurePillCss() {
+        if (pillCssInjected) return;
+        pillCssInjected = true;
+        const style = document.createElement('style');
+        style.textContent = `
+            .m115-pill {
+                display: inline-flex;
+                align-items: stretch;
+                border-radius: 13px;
+                overflow: hidden;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+                cursor: pointer;
+                margin: 0 3px;
+                white-space: nowrap;
+                vertical-align: middle;
+                z-index: 999;
+                opacity: 0.9;
+                transition: all 0.3s ease;
+                user-select: none;
+            }
+            .m115-pill:hover { opacity: 1; transform: scale(1.08); }
+            .m115-pill .m115-half {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                height: 26px;
+                width: 40px;
+            }
+            .m115-pill .m115-half:first-child { background-color: #2777F8; }
+            .m115-pill .m115-half:last-child { background-color: #ff9800; }
+            .m115-pill .m115-divider { width: 1px; background: rgba(255,255,255,0.45); }
+            .m115-pill .m115-half svg { display: block; }
+            .m115-pill.m115-loading { opacity: 0.5; pointer-events: none; }
+            .m115-pill.m115-err .m115-half { background-color: #f44336; }
+        `;
+        document.head.appendChild(style);
+    }
 
     const createdButtons = new Set();
 
@@ -126,14 +144,9 @@
      * @param {string} [folderName] 目标文件夹名（用于记住上次保存位置）
      */
     async function saveTo115(magnetLink, targetFolderId, buttonElement, folderName) {
-        // UI 反馈：处理中（记住原始文案/颜色，保存后恢复）
-        let origText = '115';
-        let origColor = '#2777F8';
+        // UI 反馈：处理中（半透明禁用），失败时短暂变红
         if (buttonElement) {
-            origText = buttonElement.textContent;
-            origColor = buttonElement.style.backgroundColor || '#2777F8';
-            buttonElement.textContent = '...';
-            buttonElement.style.backgroundColor = '#ff9800';
+            buttonElement.classList.add('m115-loading');
         }
 
         return new Promise((resolve) => {
@@ -182,12 +195,12 @@
 
                     // 刷新「上次」按钮提示（可能刚记住了新位置）
                     refreshLastButtons();
-                    // 恢复按钮状态
+                    // 恢复按钮状态（失败时短暂变红）
                     if (buttonElement) {
-                        buttonElement.textContent = origText;
-                        buttonElement.style.backgroundColor = (success || isWarning) ? origColor : '#f44336';
+                        buttonElement.classList.remove('m115-loading');
                         if (!success && !isWarning) {
-                            setTimeout(() => { buttonElement.style.backgroundColor = origColor; }, 2000);
+                            buttonElement.classList.add('m115-err');
+                            setTimeout(() => buttonElement.classList.remove('m115-err'), 2000);
                         }
                     }
                     resolve(success);
@@ -195,9 +208,9 @@
                 onerror: function() {
                     showNotification('错误', '网络请求失败');
                     if (buttonElement) {
-                        buttonElement.textContent = origText;
-                        buttonElement.style.backgroundColor = '#f44336';
-                        setTimeout(() => { buttonElement.style.backgroundColor = origColor; }, 2000);
+                        buttonElement.classList.remove('m115-loading');
+                        buttonElement.classList.add('m115-err');
+                        setTimeout(() => buttonElement.classList.remove('m115-err'), 2000);
                     }
                     resolve(false);
                 }
@@ -443,25 +456,34 @@
 
     // --- 主逻辑 ---
 
-    // 创建按钮
+    // 创建按钮（一个药丸切分左右：左=选择保存位置，右=保存到上次位置）
     function createMagnetButton(magnetLink, element) {
         if (createdButtons.has(magnetLink)) return;
 
-        const wrapper = document.createElement('span');
-        wrapper.style.cssText = 'display: inline-flex; align-items: center; white-space: nowrap; margin: 0 2px;';
+        ensurePillCss();
 
-        // 「选择」按钮：打开位置选择器
-        const btnSelect = document.createElement('span');
-        btnSelect.innerHTML = '选择';
-        btnSelect.style.cssText = btnSelectStyle;
-        btnSelect.title = '选择保存位置';
+        const pill = document.createElement('span');
+        pill.className = 'm115-pill';
 
-        // 「上次」按钮：一键保存到上次使用的文件夹
-        const btnLast = document.createElement('span');
-        btnLast.innerHTML = '上次';
-        btnLast.style.cssText = btnLastStyle;
-        btnLast.title = '保存到上次位置';
-        btnLast.setAttribute('data-rp-last', '1');
+        // 左半：文件夹图标 -> 选择保存位置
+        const halfSelect = document.createElement('span');
+        halfSelect.className = 'm115-half';
+        halfSelect.innerHTML = ICON_FOLDER;
+        halfSelect.title = '选择保存位置';
+
+        const divider = document.createElement('span');
+        divider.className = 'm115-divider';
+
+        // 右半：时钟图标 -> 保存到上次位置
+        const halfLast = document.createElement('span');
+        halfLast.className = 'm115-half';
+        halfLast.innerHTML = ICON_CLOCK;
+        halfLast.title = '保存到上次位置';
+        halfLast.setAttribute('data-rp-last', '1');
+
+        pill.appendChild(halfSelect);
+        pill.appendChild(divider);
+        pill.appendChild(halfLast);
 
         // 插入 DOM
         if (element.nodeType === Node.TEXT_NODE) {
@@ -471,38 +493,28 @@
                 const range = document.createRange();
                 range.setStart(element, index + magnetLink.length);
                 range.setEnd(element, index + magnetLink.length);
-                range.insertNode(wrapper);
-                wrapper.appendChild(btnSelect);
-                wrapper.appendChild(btnLast);
+                range.insertNode(pill);
             }
         } else {
-            element.parentNode.insertBefore(wrapper, element.nextSibling);
-            wrapper.appendChild(btnSelect);
-            wrapper.appendChild(btnLast);
+            element.parentNode.insertBefore(pill, element.nextSibling);
         }
 
-        // 交互
-        const bindHover = (btn) => {
-            btn.onmouseenter = () => { btn.style.transform = 'scale(1.1)'; btn.style.opacity = '1'; };
-            btn.onmouseleave = () => { btn.style.transform = 'scale(1)'; btn.style.opacity = '0.9'; };
-        };
-        bindHover(btnSelect);
-        bindHover(btnLast);
-
-        btnSelect.onclick = (e) => {
+        // 左：选择保存位置
+        halfSelect.onclick = (e) => {
             e.stopPropagation();
             e.preventDefault();
-            showFolderSelector(magnetLink, btnSelect);
+            showFolderSelector(magnetLink, pill);
         };
-        btnLast.onclick = (e) => {
+        // 右：一键保存到上次位置
+        halfLast.onclick = (e) => {
             e.stopPropagation();
             e.preventDefault();
             const last = getLastFolder();
             if (last && last.id != null) {
-                saveTo115(magnetLink, last.id, btnLast, last.name);
+                saveTo115(magnetLink, last.id, pill, last.name);
             } else {
                 // 尚无上次位置：退回位置选择器
-                showFolderSelector(magnetLink, btnLast);
+                showFolderSelector(magnetLink, pill);
             }
         };
 
