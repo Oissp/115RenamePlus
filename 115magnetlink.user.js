@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         115magnetlink
 // @namespace    http://tampermonkey.net/
-// @version      2.1.0-beta.3
+// @version      2.1.0-beta.4
 // @updateURL    https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115magnetlink.user.js
 // @downloadURL  https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115magnetlink.user.js
 // @description  自动捕捉页面磁力链接并保存至115云盘，支持文件夹层级浏览、添加文件夹书签(收藏夹)
@@ -22,7 +22,7 @@
 (function() {
     'use strict';
 
-    console.log('115magnetlink 已加载 (v2.1.0-beta.3)');
+    console.log('115magnetlink 已加载 (v2.1.0-beta.4)');
 
     // 调试函数
     function debug(msg, ...args) {
@@ -85,11 +85,8 @@
 
     const createdButtons = new Set();
 
-    // 通知函数
+    // 通知函数（仅用浏览器通知，自动消失，无需点击确定）
     function showNotification(title, text, isWarning = false) {
-        setTimeout(() => {
-            window.alert(`${title}\n${text}`);
-        }, 100);
         try {
             GM_notification({
                 title: title,
