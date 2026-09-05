@@ -1,33 +1,26 @@
 // ==UserScript==
-// @name         115magnetlink
-// @namespace    http://tampermonkey.net/
-// @version      2.1.0-beta.4
-// @updateURL    https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115magnetlink.user.js
-// @downloadURL  https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115magnetlink.user.js
-// @description  自动捕捉页面磁力链接并保存至115云盘，支持文件夹层级浏览、添加文件夹书签(收藏夹)
-// @author       UMP45NOSE
-// @license      MIT
-// @match        *://*/*
-// @connect      115.com
-// @grant        GM_xmlhttpRequest
-// @grant        GM_notification
-// @grant        GM_log
-// @grant        GM_setValue
-// @grant        GM_getValue
-// @grant        GM_deleteValue
-// @grant        window.Notification
-// @run-at       document-end
+// @name                115MagnetLink
+// @namespace           https://github.com/Oissp/115RenamePlus/
+// @version             2.1.0-beta.5
+// @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115MagnetLink.user.js
+// @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115MagnetLink.user.js
+// @description         自动捕捉页面磁力链接并保存至115云盘，支持文件夹层级浏览、添加文件夹书签(收藏夹)
+// @author              UMP45NOSE
+// @license             MIT
+// @match               *://*/*
+// @connect             115.com
+// @connect             aps.115.com
+// @grant               GM_xmlhttpRequest
+// @grant               GM_notification
+// @grant               GM_setValue
+// @grant               GM_getValue
+// @run-at              document-end
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    console.log('115magnetlink 已加载 (v2.1.0-beta.4)');
-
-    // 调试函数
-    function debug(msg, ...args) {
-        // console.log(`[115助手] ${msg}`, ...args);
-    }
+    console.log('115MagnetLink 已加载 (v2.1.0-beta.5)');
 
     // 匹配磁力链接的正则表达式
     const magnetRegex = /magnet:\?xt=urn:btih:[a-zA-Z0-9]{32,40}/gi;
@@ -102,7 +95,6 @@
      */
     async function get115Folders(cid = 0) {
         return new Promise((resolve) => {
-            debug(`获取文件夹列表, cid: ${cid}`);
             const apiUrl = `https://aps.115.com/natsort/files.php?aid=1&cid=${cid}&offset=0&limit=300&show_dir=1&natsort=1&format=json`;
 
             GM_xmlhttpRequest({
@@ -288,7 +280,6 @@
             .m115-btn { padding: 6px 15px; border-radius: 4px; border: none; cursor: pointer; font-size: 14px; }
             .m115-btn-primary { background: #2777F8; color: white; }
             .m115-btn-cancel { background: #eee; color: #333; }
-            .m115-bookmark-tag { background: #e8f5e9; color: #2e7d32; font-size: 10px; padding: 1px 4px; border-radius: 2px; margin-left: 5px; }
             .m115-del-btn { color: #f44336; font-weight: bold; padding: 0 5px; }
             .m115-del-btn:hover { background: #ffebee; }
         `;
@@ -439,7 +430,7 @@
                 if(addBookmark(currentCid, name)) {
                     renderBookmarks();
                 } else {
-                    alert('书签已存在');
+                    showNotification('115云盘助手', '书签已存在', true);
                 }
             }
         };
@@ -548,15 +539,16 @@
         });
     }
 
+    // 监控动态加载的防抖定时器
+    let scanTimer = null;
+
     // 启动
     function init() {
         findAndProcessMagnetLinks();
         refreshLastButtons();
-        // 监控动态加载
-        new MutationObserver((mutations) => {
-            // 简单的防抖
-            if (window._m115_timer) clearTimeout(window._m115_timer);
-            window._m115_timer = setTimeout(findAndProcessMagnetLinks, 800);
+        new MutationObserver(() => {
+            clearTimeout(scanTimer);
+            scanTimer = setTimeout(findAndProcessMagnetLinks, 800);
         }).observe(document.body, { childList: true, subtree: true });
     }
 

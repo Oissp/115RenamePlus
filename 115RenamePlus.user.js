@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.1-beta.19
+// @version             0.12.1-beta.20
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
-// @description         115RenamePlus(根据现有的文件名<番号>查询并修改文件名)
+// @description         根据现有的文件名<番号>查询并修改文件名
 // @author              db117, FAN0926, LSD08KM
+// @license             MIT
 // @match               https://115.com/*
 // @match               https://web.115.com/*
 // @domain              javbus.com
@@ -30,9 +31,6 @@
 // @connect             adult.contents.fc2.com
 // ==/UserScript==
 
-    /*
-     * @param suffix            后缀，就是扩展名
-     */
 (function () {
     'use strict';
 
@@ -66,7 +64,7 @@
     let floatDragCleanup = null;
     // 列表刷新去抖定时器（批量改名时只刷新一次）
     let refreshTimer = null;
-    
+
     /**
      * 添加按钮的定时任务
      */
@@ -148,7 +146,7 @@
             return null;
         }
     }
-    
+
     /**
      * 通过 API 获取当前目录的文件列表（新版UI专用，支持分页）
      */
@@ -190,7 +188,7 @@
 
         return allFiles.length > 0 ? allFiles : null;
     }
-    
+
     /**
      * 获取当前目录 cid
      */
@@ -523,9 +521,9 @@
      */
     function floatMenuAction(call, site) {
         if (isNewUI()) {
-            renameFromTopBar(call, site, 'video', true);
+            renameFromTopBar(call, site, true);
         } else {
-            rename(call, site, 'video', true);
+            rename(call, site, true);
         }
     }
 
@@ -643,7 +641,7 @@
     /**
      * 从顶部操作栏触发改名
      */
-    async function renameFromTopBar(call, site, rntype, ifAddDate) {
+    async function renameFromTopBar(call, site, ifAddDate) {
         // 多种方式获取选中文件项（覆盖不同状态的115页面）
         const selectors = [
             '.file-list-item input[type="checkbox"]:checked',
@@ -671,10 +669,10 @@
 
             if (fileData?.fid) {
                 // 有 React Fiber 数据，直接用
-                await renameFromData(fileData, call, site, rntype, ifAddDate);
+                await renameFromData(fileData, call, site, ifAddDate);
             } else {
                 // 回退：通过文件名 API 查找
-                await renameFromHoverMenuByFileName(fileName, call, site, rntype, ifAddDate);
+                await renameFromHoverMenuByFileName(fileName, call, site, ifAddDate);
             }
             processedCount++;
         }
@@ -688,7 +686,7 @@
     /**
      * 直接从 React Fiber 数据触发改名（无需 API 调用，最快路径）
      */
-    function renameFromData(fileData, call, site, rntype, ifAddDate) {
+    function renameFromData(fileData, call, site, ifAddDate) {
         const fid = fileData.fid || fileData.cid;
         let file_name = fileData.n;
         const isFolder = fileData.ico === 0;
@@ -717,17 +715,17 @@
 
         if (VideoCode && VideoCode.fh) {
             const ifChineseCaptions = VideoCode.fc2C ? true : checkifChineseCaptions(VideoCode.fh, file_name);
-            call(fid, rntype, VideoCode.fh, suffix, VideoCode.if4k, ifChineseCaptions, VideoCode.part, ifAddDate);
+            call(fid, VideoCode.fh, suffix, VideoCode.if4k, ifChineseCaptions, VideoCode.part, ifAddDate);
         } else {
             console.log('[115RenamePlus] 未识别到番号:', file_name);
             GM_notification(getDetails(file_name, '未识别到番号'));
         }
     }
-    
+
     /**
      * 从hover菜单触发改名（通过文件名匹配，使用 API 获取正确的 fid）
      */
-    async function renameFromHoverMenuByFileName(fileName, call, site, rntype, ifAddDate) {
+    async function renameFromHoverMenuByFileName(fileName, call, site, ifAddDate) {
         console.log('[115RenamePlus] 改名: ' + fileName);
 
         // 获取当前目录 cid
@@ -777,10 +775,10 @@
                     VideoCode = getVideoCode(file_name);
                 }
             }
-            
+
             if (VideoCode && VideoCode.fh) {
                 const ifChineseCaptions = VideoCode.fc2C ? true : checkifChineseCaptions(VideoCode.fh, file_name);
-                call(fid, rntype, VideoCode.fh, suffix, VideoCode.if4k, ifChineseCaptions, VideoCode.part, ifAddDate);
+                call(fid, VideoCode.fh, suffix, VideoCode.if4k, ifChineseCaptions, VideoCode.part, ifAddDate);
             } else {
                 console.log('[115RenamePlus] 未识别到番号:', file_name);
                 GM_notification(getDetails(file_name, '未识别到番号'));
@@ -789,25 +787,23 @@
     }
 
     /**
-    /**
      * 执行改名方法
      * @param call       回调函数
-     * @param site      网站
-     * @param rntype      改名类型 video picture
-     * @param ifAddDate   是否添加时间
+     * @param site       网站
+     * @param ifAddDate  是否添加时间
      */
-    function rename(call, site, rntype, ifAddDate ) {
+    function rename(call, site, ifAddDate) {
         if (isNewUI()) {
-            renameNewUI(call, site, rntype, ifAddDate);
+            renameNewUI(call, site, ifAddDate);
         } else {
-            renameOldUI(call, site, rntype, ifAddDate);
+            renameOldUI(call, site, ifAddDate);
         }
     }
 
     /**
      * 新版UI改名方法
      */
-    function renameNewUI(call, site, rntype, ifAddDate) {
+    function renameNewUI(call, site, ifAddDate) {
         const selectedItems = document.querySelectorAll('.file-list-item');
         let hasProcessed = false;
 
@@ -818,7 +814,7 @@
             // 优先使用 React Fiber 提取文件数据
             const fileData = getFileDataFromElement(item);
             if (fileData && fileData.fid) {
-                renameFromData(fileData, call, site, rntype, ifAddDate);
+                renameFromData(fileData, call, site, ifAddDate);
                 hasProcessed = true;
                 return;
             }
@@ -830,7 +826,7 @@
                 if (dataIndex !== null) {
                     const lf = dataList[parseInt(dataIndex)];
                     if (lf) {
-                        renameFromData(lf, call, site, rntype, ifAddDate);
+                        renameFromData(lf, call, site, ifAddDate);
                         hasProcessed = true;
                         return;
                     }
@@ -841,7 +837,7 @@
             const nameEl = item.querySelector('.file-name-responsive');
             const fileName = nameEl?.getAttribute('title') || nameEl?.innerText;
             if (fileName) {
-                renameFromHoverMenuByFileName(fileName, call, site, rntype, ifAddDate);
+                renameFromHoverMenuByFileName(fileName, call, site, ifAddDate);
                 hasProcessed = true;
             }
         });
@@ -855,7 +851,7 @@
     /**
      * 旧版UI改名方法（保留兼容）
      */
-    function renameOldUI(call, site, rntype, ifAddDate) {
+    function renameOldUI(call, site, ifAddDate) {
         // 获取所有已选择的文件
         let list = $("iframe[rel='wangpan']")
             .contents()
@@ -886,55 +882,40 @@
                 }
                 if (fid && file_name) {
                     let VideoCode;
-					// 正则匹配番号
-                    if (site == "mgstage"){
-                        VideoCode = getVideoCode(file_name,"mgstage");
-                    }else if (site == "fc2"){
-                        VideoCode = getVideoCode(file_name,"fc2");
-                    }else{
+                    if (site == "fc2") {
+                        VideoCode = getVideoCode(file_name, "fc2");
+                    } else {
                         // 兜底：即使不是 fc2 按钮，也尝试识别 FC2 番号（文件名前面可能有域名前缀，如 HHD800.COM@FC2-PPV-xxxxxx）
                         if (/FC2(?:[-_ ]?PPV)?/i.test(file_name)) {
-                            VideoCode = getVideoCode(file_name,"fc2");
+                            VideoCode = getVideoCode(file_name, "fc2");
                         } else {
                             VideoCode = getVideoCode(file_name);
                         }
                     }
                     if (VideoCode.fh) {
-						if ( rntype=="video" ){
-							// 校验是否是中文字幕
-							// 优先使用 FC2-C 标记，如果没有则用常规检查
-							let ifChineseCaptions = VideoCode.fc2C ? true : checkifChineseCaptions(VideoCode.fh, file_name);
-							// 执行查询
-							call(fid, rntype, VideoCode.fh, suffix, VideoCode.if4k, ifChineseCaptions, VideoCode.part, ifAddDate);
-						} else if ( rntype=="picture" ){
-							// 是图片时，向 part 传图片名冗余，不要中字判断，只在页面获取编号
-							// 图片名冗余
-							let picCaptions = getPicCaptions(VideoCode.fh, file_name);
-							let ifChineseCaptions;
-							// 执行查询
-							call(fid, rntype, VideoCode.fh, suffix, VideoCode.if4k, ifChineseCaptions, picCaptions, ifAddDate);
-						}
-
+                        // 优先使用 FC2-C 标记，如果没有则用常规检查
+                        let ifChineseCaptions = VideoCode.fc2C ? true : checkifChineseCaptions(VideoCode.fh, file_name);
+                        // 执行查询
+                        call(fid, VideoCode.fh, suffix, VideoCode.if4k, ifChineseCaptions, VideoCode.part, ifAddDate);
                     }
                 }
             });
     }
     /**
-     * 通过javbus进行查询
-	 * 请求javbus,并请求115进行改名
-	 * @param fid               文件id
-	 * @param rntype      		改名类型 video picture
-	 * @param fh                番号
-	 * @param suffix            后缀
-	 * @param ifChineseCaptions   是否有中文字幕
-	 * @param part              视频分段，图片冗余文件名 
-	 * @param ifAddDate              是否添加时间 
-	 * @param searchUrl               请求地址
+     * 通过 Javbus 进行查询
+     * 请求 Javbus，并请求115进行改名
+     * @param fid               文件id
+     * @param fh                番号
+     * @param suffix            后缀
+     * @param ifChineseCaptions 是否有中文字幕
+     * @param part              视频分段
+     * @param ifAddDate         是否添加时间
+     * @param searchUrl         请求地址
      */
-    function renameJavbus(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate) {
-        requestJavbus(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, javbusSearch);
+    function renameJavbus(fid, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate) {
+        requestJavbus(fid, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, javbusSearch);
     }
-    function requestJavbus(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, searchUrl) {
+    function requestJavbus(fid, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, searchUrl) {
         let title;
         let fh_o;   //网页上的番号
         let date;
@@ -953,11 +934,11 @@
                 anonymous: false,
                 onload: xhr => {
                     let response = parseHTML(xhr.responseText);
-                    
+
                     // 获取所有搜索结果，找到与原始番号完全匹配的结果
                     let movieBoxes = response.find("a.movie-box");
                     let matchedBox = null;
-                    
+
                     movieBoxes.each(function() {
                         let box = $(this);
                         let boxFh = box.find("div.photo-info date:first").html();
@@ -976,7 +957,7 @@
                             }
                         }
                     });
-                    
+
                     if (matchedBox) {
                         fh_o = matchedBox.find("div.photo-info date:first").html();
                         moviePage = matchedBox.attr("href");
@@ -987,10 +968,7 @@
         });
         function getJavbusDetail(){
             return new Promise((resolve, reject) => {
-				if ( rntype=="picture" ){
-					resolve();
-				} else if ( rntype=="video" ){
-					if(moviePage){
+                if (moviePage) {
 						GM_xmlhttpRequest({
 							method: "GET",
 							url: moviePage,
@@ -1006,23 +984,17 @@
 								date = response
 								        .find("p:nth-of-type(2)")
 								        .html();
-								date = date.match(/\d{4}\-\d{2}\-\d{2}/);	
+								date = date.match(/\d{4}\-\d{2}\-\d{2}/);
 								// 演员们
 								let actorTags = response.find("div.star-name").each(function(){
 									actors.push($(this).find("a").attr("title"));
 								});
-								/*
-								for ( let actor of actorTags) {
-									actors.push(actor.find("a").attr("title"));
-								}
-								*/
 								resolve();
 							}
 						});
-					}else{
-						resolve();
-					}
-				}
+                } else {
+                    resolve();
+                }
             });
         }
         function setName(){
@@ -1038,7 +1010,7 @@
                         .filter((s, i, arr) => arr.indexOf(s) === i)
                         .join(",");
                     // 构建新名称
-                    let newName = buildNewName(fh_o, rntype, suffix, if4k, ifChineseCaptions, part, title, date, actor, ifAddDate);                    
+                    let newName = buildNewName(fh_o, suffix, if4k, ifChineseCaptions, part, title, date, actor, ifAddDate);
                     if (newName) {
                         // 修改名称
                         send_115(fid, newName, fh_o);
@@ -1046,7 +1018,7 @@
                     resolve(newName);
                 }else if (searchUrl !== javbusUncensoredSearch) {
                     // 进行无码重查询
-                    requestJavbus(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, javbusUncensoredSearch);
+                    requestJavbus(fid, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, javbusUncensoredSearch);
                 }else {
                     resolve("没有查到结果");
                 }
@@ -1057,17 +1029,16 @@
     }
 
     /**
-     * 通过javdb进行查询
-     * 请求javdb,并请求115进行改名
+     * 通过 Javdb 进行查询
+     * 请求 Javdb，并请求115进行改名
      * @param fid               文件id
-     * @param rntype            改名类型 video picture
      * @param fh                番号
      * @param suffix            后缀
-     * @param ifChineseCaptions   是否有中文字幕
-     * @param part              视频分段，图片冗余文件名 
-     * @param ifAddDate              是否添加时间 
+     * @param ifChineseCaptions 是否有中文字幕
+     * @param part              视频分段
+     * @param ifAddDate         是否添加时间
      */
-    function renameJavdb(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate) {
+    function renameJavdb(fid, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate) {
         // 让 javdb 也支持 FC2：把 FC2PPV/数字 统一规范成 JavDB 认可的 FC2-PPV-xxxxxx
         // 同时保留 -C（中文字幕）用于最终文件名（requestJavdb 内部查询会自动去掉 -C）
         if (/^\d{5,8}$/i.test(fh)) {
@@ -1082,9 +1053,9 @@
                 return "FC2-PPV-" + n + (c ? "-" + c.toUpperCase() : "");
             });
         }
-        requestJavdb(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, javdbSearch);
+        requestJavdb(fid, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, javdbSearch);
     }
-    function requestJavdb(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, searchUrl) {
+    function requestJavdb(fid, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, searchUrl) {
         let title;
         let fh_o;
         let date;
@@ -1148,10 +1119,7 @@
         });
         function getJavdbDetail(){
             return new Promise((resolve, reject) => {
-                if (rntype == "picture") {
-                    resolve();
-                } else if (rntype == "video") {
-                    if (moviePage) {
+                if (moviePage) {
                         GM_xmlhttpRequest({
                             method: "GET",
                             url: moviePage,
@@ -1216,14 +1184,13 @@
                     } else {
                         resolve();
                     }
-                }
             });
         }
         function setName(){
             return new Promise((resolve, reject) => {
                 if (moviePage) {
                     let actor = actors.toString();
-                    let newName = buildNewName(fh_o, rntype, suffix, if4k, ifChineseCaptions, part, title, date, actor, ifAddDate);
+                    let newName = buildNewName(fh_o, suffix, if4k, ifChineseCaptions, part, title, date, actor, ifAddDate);
                     if (newName) {
                         send_115(fid, newName, fh_o);
                     }
@@ -1240,21 +1207,20 @@
     }
 
     /**
-     * 通过avmoo进行查询
-     * 请求avmoo,并请求115进行改名
+     * 通过 FC2 进行查询
+     * 请求 FC2，并请求115进行改名
      * @param fid               文件id
-     * @param rntype      		改名类型 video picture
      * @param fh                番号
      * @param suffix            后缀
-     * @param ifChineseCaptions   是否有中文字幕
-     * @param part              视频分段，图片冗余文件名 
-     * @param ifAddDate              是否添加时间 
-     * @param searchUrl               请求地址
+     * @param ifChineseCaptions 是否有中文字幕
+     * @param part              视频分段
+     * @param ifAddDate         是否添加时间
+     * @param searchUrl         请求地址
      */
-    function renameFc2(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate) {
-        requestFC2(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, Fc2Search);
+    function renameFc2(fid, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate) {
+        requestFC2(fid, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, Fc2Search);
     }
-    function requestFC2(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, searchUrl) {
+    function requestFC2(fid, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, searchUrl) {
         // 从 fh 中提取纯数字编号（如 FC2-PPV-745325-C / FC2-745325-C -> 745325）
         let fc2Num = fh.match(/FC2[-_ ]?(?:PPV[-_ ]?)?(\d{5,8})/i);
         if (!fc2Num) {
@@ -1262,7 +1228,7 @@
             fc2Num = [null, fh.replace(/[^0-9]/g, "")];
         }
         let fc2Id = fc2Num[1];
-        
+
         GM_xmlhttpRequest({
             method: "GET",
             url: searchUrl + fc2Id + "/",
@@ -1295,50 +1261,27 @@
                             .find("div.items_article_Releasedate p")
                             .html();
                 let date = dateText ? dateText.replace(/\s+/g,"").replace(/:/g, "").replace(/\//g, "-") : "";
-				if ( rntype=="picture" ){
-					if ( fh && title ) {
-						title="";
-						user="";
-						date="";
-					}
-				}				
                 // 构建标准番号格式（与 JavDB 保持一致：FC2-xxxxxx，去掉 PPV）
                 let standardFh = "FC2-" + fc2Id;
                 // 如果原 fh 里有 -C 标记，加回去
                 if (/-C$/i.test(fh)) {
                     standardFh += "-C";
                 }
-                
+
                 if (title) {
                     // 构建新名称
-                    let newName = buildNewName(standardFh, rntype, suffix, if4k, ifChineseCaptions, part, title, date, user, ifAddDate);
+                    let newName = buildNewName(standardFh, suffix, if4k, ifChineseCaptions, part, title, date, user, ifAddDate);
                     if (newName) {
                         // 修改名称
                         send_115(fid, newName, standardFh);
                     }
-                } else if (searchUrl !== javbusUncensoredSearch) {
+                } else {
                     GM_notification(getDetails(standardFh, "商品页可能已消失"));
-                    // 进行无码重查询
-                    // requestJavbus(fid, rntype, fh, suffix, if4k, ifChineseCaptions, part, javbusUncensoredSearch);
                 }
             }
         })
     }
 
-    /**
-     * 图片名冗余
-     * @param fh    番号
-     * @param title 标题
-     */
-    function getPicCaptions(fh, title) {
-        let regExp = new RegExp(fh + "[_-]?[A-Z]{1,5}");
-        let match = title.toUpperCase().match(regExp);
-        if (match) {
-            let houzhui = title.slice( fh.length , title.length )
-            return houzhui;
-        }
-    }
-	
     /**
      * 校验是否为中文字幕
      * @param fh    番号
@@ -1362,13 +1305,13 @@
             let upperTitle = title.toUpperCase();
             let fhUpper = fh.toUpperCase();
             let cMatch = match[0];
-            
+
             // 查找匹配到的C在标题中的位置
             let cIndex = upperTitle.indexOf(cMatch);
             // 查找番号在标题中的位置
             let fhIndex = upperTitle.indexOf(fhUpper);
             let fhEndIndex = fhIndex + fhUpper.length;
-            
+
             // 如果C的位置在番号之后，且不在番号内部，则认为是字幕标识
             if (cIndex >= 0 && fhIndex >= 0) {
                 if (cIndex < fhIndex || cIndex >= fhEndIndex) {
@@ -1378,80 +1321,57 @@
         }
         return false;
     }
-	
+
     /**
-     * 构建新名称：番号 中文字幕 日期 标题  文件名不超过255
+     * 构建新名称：番号 中文字幕 日期 标题
      * @param fh                番号
-	 * @param rntype      		改名类型 video picture
      * @param suffix            后缀，扩展名
-     * @param ifChineseCaptions   是否有中文字幕
-	 * @param part				视频分段，图片冗余文件名 
+     * @param ifChineseCaptions 是否有中文字幕
+     * @param part              视频分段
      * @param title             番号标题
      * @param date              日期
      * @param actor             演员
-     * @param ifAddDate           是否加日期
+     * @param ifAddDate         是否加日期
      * @returns {string}        新名称
      */
-    function buildNewName(fh, rntype, suffix, if4k, ifChineseCaptions, part, title, date, actor, ifAddDate) {
-		if ( rntype=="video" ){
-			if (title) {
-				// javbus 的 <h3> 可能是：番号 + 标题 + 演员名；而我们会另外拼接 actor，避免重复
-				if (actor && title) {
-					let actorList = String(actor).split(",").map(s => (s || "").trim()).filter(Boolean);
-					for (let a of actorList) {
-						if (title.endsWith(" " + a)) {
-							title = title.slice(0, title.length - (a.length + 1)).trim();
-						}
-					}
-				}
-                let newName = String(fh);
-				// 是 4k
-				if (if4k) {
-					newName = newName + if4k;
-				}
-				// 有中文字幕
-				if (ifChineseCaptions) {
-					newName = newName + "-C";
-				}
-				// 有分段：统一格式为 番号_字母/数字
-				if (part){
-					newName = newName + "_" + part;
-				}
-				// 有演员
-				if (actor) {
-					newName = newName + " " + actor;
-				}
-				// 拼接标题 判断长度
-				newName = newName + " " + title;
-				if ( newName.length > 200 ){
-					newName = newName.substring(0, 200);
-					newName += "...";
-				}
-				// 有时间
-				if (ifAddDate && date) {
-					newName = newName + " " + date;
-				}
-				if (suffix) {
-					// 文件保存后缀名
-					newName = newName + suffix;
-				}
-				return newName;
-			}
-        } else if ( rntype=="picture" ){
-			if (fh){
-				let newName = String(fh);
-				if (part){
-				    newName = newName + "_" + part;
-				}
-				if (suffix) {
-				    // 文件保存后缀名
-				    newName = newName + suffix;
-				}
-				return newName;
-			}
-		}
+    function buildNewName(fh, suffix, if4k, ifChineseCaptions, part, title, date, actor, ifAddDate) {
+        if (!title) return;
+
+        // javbus 的 <h3> 可能是：番号 + 标题 + 演员名；而我们会另外拼接 actor，避免重复
+        if (actor && title) {
+            let actorList = String(actor).split(",").map(s => (s || "").trim()).filter(Boolean);
+            for (let a of actorList) {
+                if (title.endsWith(" " + a)) {
+                    title = title.slice(0, title.length - (a.length + 1)).trim();
+                }
+            }
+        }
+        let newName = String(fh);
+        if (if4k) {
+            newName = newName + if4k;
+        }
+        if (ifChineseCaptions) {
+            newName = newName + "-C";
+        }
+        if (part) {
+            newName = newName + "_" + part;
+        }
+        if (actor) {
+            newName = newName + " " + actor;
+        }
+        newName = newName + " " + title;
+        if (newName.length > 200) {
+            newName = newName.substring(0, 200) + "...";
+        }
+        if (ifAddDate && date) {
+            newName = newName + " " + date;
+        }
+        if (suffix) {
+            newName = newName + suffix;
+        }
+        return newName;
     }
-	
+
     /**
      * 115名称不接受(\/:*?\"<>|)
      * @param name
@@ -1467,9 +1387,9 @@
             .replace(/\|/g, "")
             .replace(/\*/g, " ");
     }
-	
+
     /**
-     * 请求115接口改名 
+     * 请求115接口改名
      * @param id 文件id
      * @param name 要修改的名称
      * @param fh 番号
@@ -1721,7 +1641,7 @@
     /**
      * 获取番号
      * @param title         源标题
-	 * @param type			番号类型 mgstage fc2
+	 * @param type			番号类型 fc2
      * @returns {string}    提取的番号
      */
     function getVideoCode(title, type="nomal") {
@@ -1729,7 +1649,7 @@
 
         // 清理引流站前缀（通用正则 + 特殊硬编码）
         title = cleanDomainPrefix(title);
-        
+
         // 其他清理：分辨率、字幕组、来源标记等
         title = title
             .replace("1080P", "")
@@ -1741,7 +1661,7 @@
 
         // 判断是否多集/分段：支持多种格式
         let part;
-        
+
         // 特殊处理 -C（中文字幕标记），不要把它当成 part
         let fc2CFlag = false;
         // FC2 格式：FC2-PPV-xxxxxx-C / FC2-xxxxxx-C
@@ -1754,7 +1674,7 @@
             fc2CFlag = true;
             title = title.replace(/[-_ ]C$/i, "");
         }
-        
+
         // 传统格式：CD1, HD2, FHD3, HHB4 等（只在文件名中找，不要从整段 title 末尾取，避免误把日期 03-19 当分段）
         if (!part) {
             part = title.match(/CD\d{1,2}/);
@@ -1781,14 +1701,9 @@
 			if(if4k){ if4k = "-4kH264 版";}
 		}
 
-		
+
 		let t = '';
-		if (type=="mgstage"){
-			t = title.match(/\d{3,4}[A-Z]{3,4}[\-_]?\d{3,4}/)
-			if (!t) {  // シロウトTV @SIRO-3585
-				t = title.match(/[A-Z]{2,5}[\-_]{1}\d{3,5}/);
-			}	
-		}else if (type=="fc2"){
+		if (type=="fc2"){
 			// 支持：
 			// - FC2PPV-3281892 / FC2-PPV-3281892 / FC2 PPV 3281892
 			// - 无 PPV 格式：FC2-745325 / FC2-745325-C
@@ -1873,7 +1788,7 @@
 				// Jukujo-Club | 熟女俱乐部
 				t = title.match(/JUKUJO[\-_]\d{4}/);
 			}
-			
+
 			// 通用
 			if (!t) {
 				// 允许末尾 1 个字母分段（如 STAR-590B）
@@ -1892,7 +1807,7 @@
 			}
 			if (!t) {
 				t = title.match(/\d+[\-_]{0,1}\d+/);
-			}			
+			}
 		}
 
         if (!t) {
@@ -1900,7 +1815,7 @@
         }
         if (t) {
             let tStr = t.toString();
-            
+
             // 先把番号里的 _ 统一成 -，避免后面处理分段时漏判
             tStr = tStr.replace(/_/g, "-");
 
@@ -1908,17 +1823,15 @@
             // 1) 数字分段：FC2-PPV-4679178-3 / FC2-PPV-4679178_4
             // 2) 字母分段：STAR-590A
             // 注意：-C 是中文字幕标记，不是分段，要排除
-            
+
             // 先检查是否是 FC2-xxxxxx-C 格式，如果是，先把 -C 临时去掉，避免误判为分段
             let tempC = "";
             if (/FC2[-_ ]?(?:PPV[-_ ]?)?\d{5,8}[-_ ]C$/i.test(tStr)) {
                 tempC = "C";
                 tStr = tStr.replace(/[-_ ]C$/i, "");
             }
-            
-            // 如果前面 fc2 分支已经直接识别出 part，就不要再从番号里误剥离
-            // 如果前面 fc2 分支已经直接识别出 part，就不要再从番号里误剥离
-            // 改进：区分真正的分段（CD1/HD2 等）和番号中的数字（LAFBD-41 中的 41）
+
+            // 区分真正的分段（CD1/HD2 等）和番号中的数字（LAFBD-41 中的 41）
             if (!part) {
                 let mNum = tStr.match(/^(.*?)-(\d{1,2})$/);
                 if (mNum) {
@@ -1940,7 +1853,7 @@
                     part = mLetter[2];
                 }
             }
-            
+
             // 把临时移除的 -C 标记记录到 fc2CFlag，让后续逻辑处理
             if (tempC && !fc2CFlag) {
                 fc2CFlag = true;
