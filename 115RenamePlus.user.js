@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.1-beta.20
+// @version             0.12.1-beta.22
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         根据现有的文件名<番号>查询并修改文件名
@@ -38,6 +38,7 @@
     const ICON_BUS  = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>';
     const ICON_DB   = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h6M9 15h3"/></svg>';
     const ICON_FC2  = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>';
+    const ICON_TAG  = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="7" cy="7" r="1.5"/></svg>';
     const ICON_CLEAN = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z"/></svg>';
     // 悬浮按钮主图标
     const RENAME_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>';
@@ -286,6 +287,8 @@
         menu.appendChild(mkItem('JavBus', '通过 JavBus 查询并改名', ICON_BUS, () => floatMenuAction(renameJavbus, 'javbus')));
         menu.appendChild(mkItem('JavDB', '通过 JavDB 查询并改名', ICON_DB, () => floatMenuAction(renameJavdb, 'javdb')));
         menu.appendChild(mkItem('FC2', '通过 FC2 查询并改名', ICON_FC2, () => floatMenuAction(renameFc2, 'fc2')));
+        menu.appendChild(makeDivider());
+        menu.appendChild(mkItem('添加标签', '查番号，用女演员名给文件打标签', ICON_TAG, tagByActorAction));
 
         // 主按钮
         const toggle = document.createElement('button');
@@ -1055,18 +1058,20 @@
         }
         requestJavdb(fid, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, javdbSearch);
     }
-    function requestJavdb(fid, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, searchUrl) {
-        let title;
-        let fh_o;
-        let date;
-        let moviePage;
-        let actors = [];
+    /**
+     * 查询 JavDB：搜索番号 → 打开详情页 → 解析标题、日期、女演员
+     * @param fh        番号
+     * @param searchUrl 搜索地址
+     * @returns {Promise<{fh_o:string, moviePage:string, title:string, date:*, actors:string[]}|null>}
+     *          未收录或请求失败时返回 null
+     */
+    function fetchJavdbInfo(fh, searchUrl) {
         let fh_query = fh;
         if (/^FC2-PPV-\d{5,8}-C$/i.test(fh_query)) {
             fh_query = fh_query.replace(/-C$/i, "");
         }
         let url_s = searchUrl + fh_query;
-        let getJavdbSearch = new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             GM_xmlhttpRequest({
                 method: "GET",
                 url: url_s,
@@ -1104,106 +1109,322 @@
                         }
                     });
 
-                    if (matchedItem) {
-                        fh_o = matchedItem.find(".video-title strong").text().trim();
-                        let href = matchedItem.find("a").attr("href");
-                        moviePage = href ? javdbBase + href : null;
-                    }
-                    resolve(moviePage);
+                    if (!matchedItem) return resolve(null);
+                    let href = matchedItem.find("a").attr("href");
+                    if (!href) return resolve(null);
+                    resolve({
+                        fh_o: matchedItem.find(".video-title strong").text().trim(),
+                        moviePage: javdbBase + href
+                    });
                 },
                 onerror: (e) => {
                     console.log('[115RenamePlus] JavDB请求失败:', e);
                     resolve(null);
                 }
             });
-        });
-        function getJavdbDetail(){
-            return new Promise((resolve, reject) => {
-                if (moviePage) {
-                        GM_xmlhttpRequest({
-                            method: "GET",
-                            url: moviePage,
-                            onload: xhr => {
-                                let response = parseHTML(xhr.responseText);
-                                title = response.find(".current-title").text().trim();
-                                if (title && fh_o && title.startsWith(fh_o)) {
-                                    title = title.slice(fh_o.length).trim();
-                                }
+        }).then(info => info ? fetchJavdbDetail(info) : null);
+    }
 
-                                let labels = {};
-                                response.find(".panel-block").each(function() {
-                                    let strong = $(this).find("strong");
-                                    if (strong.length) {
-                                        let key = strong.text().replace(":", "").trim();
-                                        labels[key] = $(this);
-                                    }
-                                });
+    /**
+     * 请求 JavDB 详情页，解析标题、日期、女演员
+     * @param info fetchJavdbInfo 的结果
+     * @returns {Promise<Object|null>} 在 info 基础上补全 title/date/actors，失败返回 null
+     */
+    function fetchJavdbDetail(info) {
+        return new Promise((resolve) => {
+            GM_xmlhttpRequest({
+                method: "GET",
+                url: info.moviePage,
+                onload: xhr => {
+                    let response = parseHTML(xhr.responseText);
+                    let title = response.find(".current-title").text().trim();
+                    if (title && info.fh_o && title.startsWith(info.fh_o)) {
+                        title = title.slice(info.fh_o.length).trim();
+                    }
 
-                                if (labels["日期"]) {
-                                    let dateText = labels["日期"].find(".value").text().trim();
-                                    date = dateText.match(/\d{4}-\d{2}-\d{2}/);
-                                }
+                    let labels = {};
+                    response.find(".panel-block").each(function() {
+                        let strong = $(this).find("strong");
+                        if (strong.length) {
+                            let key = strong.text().replace(":", "").trim();
+                            labels[key] = $(this);
+                        }
+                    });
 
-                                let actorBlock = labels["演員"] || labels["演员"] || labels["出演"] || labels["出演者"] || labels["Cast"];
-                                if (actorBlock) {
-                                    actorBlock.find(".value a").each(function(){
-                                        let $a = $(this);
-                                        let href = $a.attr("href") || "";
-                                        let a = $a.text().trim();
-                                        if (!a) return;
-                                        if (href.indexOf("/actors/") === -1) return;
-                                        let nextStrong = $a.next("strong.symbol");
-                                        if (nextStrong.length && nextStrong.hasClass("female")) {
-                                            if (actors.indexOf(a) === -1) actors.push(a);
-                                        }
-                                    });
-                                }
+                    let date;
+                    if (labels["日期"]) {
+                        let dateText = labels["日期"].find(".value").text().trim();
+                        date = dateText.match(/\d{4}-\d{2}-\d{2}/);
+                    }
 
-                                if (!actors.length) {
-                                    response.find("a[href*=\"/actors/\"]").each(function(){
-                                        let $a = $(this);
-                                        let a = $a.text().trim();
-                                        if (!a) return;
-                                        if (a.indexOf(",") !== -1) return;
-                                        let nextStrong = $a.next("strong.symbol");
-                                        if (!(nextStrong.length && nextStrong.hasClass("female"))) return;
-                                        if (actors.indexOf(a) === -1) actors.push(a);
-                                    });
-                                }
+                    let actors = [];
 
-                                if (title && actors.length) {
-                                    for (let a of actors) {
-                                        if (a && title.endsWith(" " + a)) {
-                                            title = title.slice(0, title.length - (a.length + 1)).trim();
-                                        }
-                                    }
-                                }
-                                resolve();
+                    // JavDB 的演员性别标记有两种形态：
+                    // 新版直接在 <a> 上带 class="actor-female" / "actor-male"，
+                    // 旧版是紧跟其后的 <strong class="symbol female">。返回 "" 表示页面没给性别信息。
+                    function actorGender($a) {
+                        if ($a.hasClass("actor-female")) return "female";
+                        if ($a.hasClass("actor-male")) return "male";
+                        let nextStrong = $a.next("strong.symbol");
+                        if (nextStrong.length) {
+                            if (nextStrong.hasClass("female")) return "female";
+                            if (nextStrong.hasClass("male")) return "male";
+                        }
+                        return "";
+                    }
+
+                    // 先按性别过滤；只有当整块/整页都没有任何性别标记时，
+                    // 才退回「非男性即收录」，避免页面改版后一个演员都拿不到
+                    function collectActors($scope, onlyValueAnchors) {
+                        let unknown = [];
+                        let sawGender = false;
+                        let $links = onlyValueAnchors ? $scope.find(".value a") : $scope.find("a[href*=\"/actors/\"]");
+                        $links.each(function(){
+                            let $a = $(this);
+                            let a = $a.text().trim();
+                            if (!a) return;
+                            // 只接受演员链接，避免把分类/标签混进来
+                            let href = $a.attr("href") || "";
+                            if (href.indexOf("/actors/") === -1) return;
+                            if (!onlyValueAnchors && a.indexOf(",") !== -1) return;
+                            let g = actorGender($a);
+                            if (g) sawGender = true;
+                            if (g === "male") return;
+                            if (g === "female") {
+                                if (actors.indexOf(a) === -1) actors.push(a);
+                            } else if (unknown.indexOf(a) === -1) {
+                                unknown.push(a);
                             }
                         });
-                    } else {
-                        resolve();
+                        if (!actors.length && !sawGender) actors = unknown;
                     }
-            });
-        }
-        function setName(){
-            return new Promise((resolve, reject) => {
-                if (moviePage) {
-                    let actor = actors.toString();
-                    let newName = buildNewName(fh_o, suffix, if4k, ifChineseCaptions, part, title, date, actor, ifAddDate);
-                    if (newName) {
-                        send_115(fid, newName, fh_o);
+
+                    let actorBlock = labels["演員"] || labels["演员"] || labels["出演"] || labels["出演者"] || labels["Cast"];
+                    if (actorBlock) collectActors(actorBlock, true);
+
+                    if (!actors.length) collectActors(response, false);
+
+                    // JavDB 有些情况下标题末尾会带演员名（或原文件名残留），这里用演员列表把 title 末尾的演员名剔除，保证最终格式统一
+                    if (title && actors.length) {
+                        for (let a of actors) {
+                            if (a && title.endsWith(" " + a)) {
+                                title = title.slice(0, title.length - (a.length + 1)).trim();
+                            }
+                        }
                     }
-                    resolve(newName);
-                } else {
-                    console.log('[115RenamePlus] JavDB未查到结果:', fh);
-                    GM_notification(getDetails(fh, "JavDB未查到结果"));
-                    resolve("没有查到结果");
+
+                    resolve({ fh_o: info.fh_o, moviePage: info.moviePage, title: title, date: date, actors: actors });
+                },
+                onerror: (e) => {
+                    console.log('[115RenamePlus] JavDB详情请求失败:', e);
+                    resolve(null);
                 }
             });
+        });
+    }
+
+    /**
+     * 通过 JavDB 查询并改名
+     */
+    function requestJavdb(fid, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, searchUrl) {
+        fetchJavdbInfo(fh, searchUrl).then(info => {
+            if (!info) {
+                console.log('[115RenamePlus] JavDB未查到结果:', fh);
+                GM_notification(getDetails(fh, "JavDB未查到结果"));
+                return;
+            }
+            let newName = buildNewName(info.fh_o, suffix, if4k, ifChineseCaptions, part, info.title, info.date, info.actors.toString(), ifAddDate);
+            if (newName) {
+                send_115(fid, newName, info.fh_o);
+            }
+        });
+    }
+
+    // ===== 按女演员名打标签 =====
+
+    // 115 标签的固定配色（接口不支持自定义颜色）
+    const LABEL_COLORS = ['#FF4B30', '#F78C26', '#FFC032', '#43BA80', '#2670FC', '#8B69FE', '#CCCCCC'];
+
+    // 标签只认 ID，这里缓存「标签名 → ID」与「fid → 已有标签」，避免批量处理时反复请求
+    let labelStore = { list: null, byName: new Map(), dirLabels: null };
+
+    // 串行队列：并发建标签会建出重复标签，所以让每个文件依次处理
+    let tagQueue = Promise.resolve();
+
+    function resetLabelStore() {
+        labelStore = { list: null, byName: new Map(), dirLabels: null };
+    }
+
+    /**
+     * 按名字稳定地分配一个颜色，保证同一个演员每次拿到的颜色一致
+     */
+    function labelColorFor(name) {
+        let h = 0;
+        for (let i = 0; i < name.length; i++) {
+            h = (h * 31 + name.charCodeAt(i)) >>> 0;
         }
-        getJavdbSearch.then(getJavdbDetail)
-            .then(setName, setName);
+        return LABEL_COLORS[h % LABEL_COLORS.length];
+    }
+
+    /**
+     * 请求 115 接口并解析 JSON
+     * @returns {Promise<Object|null>} 失败返回 null
+     */
+    function request115(method, url, data) {
+        return new Promise((resolve) => {
+            GM_xmlhttpRequest({
+                method: method,
+                url: url,
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Origin": "https://115.com",
+                    "Referer": "https://115.com/"
+                },
+                data: data,
+                withCredentials: true,
+                onload: function (xhr) {
+                    try {
+                        resolve(JSON.parse(xhr.responseText));
+                    } catch (e) {
+                        console.log('[115RenamePlus] 解析响应失败:', e);
+                        resolve(null);
+                    }
+                },
+                onerror: function (e) {
+                    console.log('[115RenamePlus] 请求失败:', e);
+                    resolve(null);
+                }
+            });
+        });
+    }
+
+    /**
+     * 拉取全部标签（分页）
+     */
+    async function fetchAllLabels() {
+        const LIMIT = 100;
+        let all = [];
+        for (let offset = 0; offset < 2000; offset += LIMIT) {
+            const res = await request115('GET', 'https://webapi.115.com/label/list?offset=' + offset + '&limit=' + LIMIT);
+            if (!res || !res.state || !res.data) break;
+            const list = res.data.list || [];
+            all = all.concat(list);
+            if (list.length < LIMIT) break;
+        }
+        return all;
+    }
+
+    /**
+     * 按名字取标签 ID，没有就新建
+     */
+    async function getOrCreateLabelId(name) {
+        if (labelStore.byName.has(name)) return labelStore.byName.get(name);
+
+        if (!labelStore.list) labelStore.list = await fetchAllLabels();
+        let hit = labelStore.list.find(l => l.name === name);
+
+        if (!hit) {
+            const body = 'name[]=' + encodeURIComponent(name + '\x07' + labelColorFor(name));
+            const res = await request115('POST', 'https://webapi.115.com/label/add_multi', body);
+            if (!res || !res.state) {
+                console.log('[115RenamePlus] 创建标签失败:', name);
+                return null;
+            }
+            // add_multi 的返回体不一定带 id，重新拉一次列表更稳妥
+            labelStore.list = await fetchAllLabels();
+            hit = labelStore.list.find(l => l.name === name);
+        }
+
+        if (!hit) return null;
+        labelStore.byName.set(name, hit.id);
+        return hit.id;
+    }
+
+    /**
+     * 读取当前目录下每个文件的已有标签
+     * @returns {Promise<Map<string, string[]|null>>} 值为 null 表示响应里没有标签字段，不能安全写入
+     */
+    async function fetchDirLabels() {
+        const map = new Map();
+        const list = await fetchFileListByAPI(getCurrentCid());
+        if (!list) return map;
+        list.forEach(f => {
+            if (!f || !f.fid) return;
+            map.set(String(f.fid), Array.isArray(f.fl) ? f.fl.map(l => String(l.id)) : null);
+        });
+        return map;
+    }
+
+    /**
+     * 写入文件标签
+     * 注意：115 的 file_label 是全量覆盖，必须把已有标签一起提交，否则会清掉手动打过的标签
+     */
+    async function setFileLabels(fid, labelIds) {
+        const body = 'fid=' + encodeURIComponent(fid) + '&file_label=' + encodeURIComponent(labelIds.join(','));
+        const res = await request115('POST', 'https://webapi.115.com/files/edit', body);
+        return !!(res && res.state);
+    }
+
+    /**
+     * 悬浮按钮「添加标签」入口
+     */
+    function tagByActorAction() {
+        resetLabelStore();
+        tagQueue = Promise.resolve();
+        if (isNewUI()) {
+            renameFromTopBar(tagByActor, 'javdb', true);
+        } else {
+            rename(tagByActor, 'javdb', true);
+        }
+    }
+
+    /**
+     * 打标签回调，签名与改名回调保持一致，好复用选文件的流程
+     */
+    function tagByActor(fid, fh) {
+        tagQueue = tagQueue
+            .then(() => tagOneFile(fid, fh))
+            .catch(e => console.log('[115RenamePlus] 打标签异常:', e));
+    }
+
+    /**
+     * 查番号取女演员名，作为标签打到文件上
+     */
+    async function tagOneFile(fid, fh) {
+        const info = await fetchJavdbInfo(fh, javdbSearch);
+        if (!info) {
+            console.log('[115RenamePlus] JavDB未查到结果:', fh);
+            GM_notification(getDetails(fh, 'JavDB未查到结果'));
+            return;
+        }
+
+        const actors = info.actors || [];
+        if (!actors.length) {
+            GM_notification(getDetails(fh, '未查到女演员'));
+            return;
+        }
+
+        if (!labelStore.dirLabels) labelStore.dirLabels = await fetchDirLabels();
+        const existing = labelStore.dirLabels.get(String(fid));
+        if (!existing) {
+            // 读不到该文件当前的标签，写入会覆盖已有标签，宁可不打
+            GM_notification(getDetails(fh, '读取现有标签失败，已跳过'));
+            return;
+        }
+
+        const ids = existing.slice();
+        for (const name of actors) {
+            const id = await getOrCreateLabelId(name);
+            if (id && ids.indexOf(id) === -1) ids.push(id);
+        }
+
+        if (ids.length === existing.length) {
+            GM_notification(getDetails(fh, '标签已存在'));
+            return;
+        }
+
+        const ok = await setFileLabels(fid, ids);
+        GM_notification(getDetails(fh, ok ? '已添加标签 ' + actors.join('/') : '添加标签失败'));
     }
 
     /**
