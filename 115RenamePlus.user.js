@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.1-beta.22
+// @version             0.12.1-beta.23
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         根据现有的文件名<番号>查询并修改文件名
@@ -929,45 +929,54 @@
         if (/^FC2-PPV-\d{5,8}-C$/i.test(fh_query)) {
             fh_query = fh_query.replace(/-C$/i, "");
         }
-        let url_s = searchUrl + fh_query;
-        let getJavbusSearch = new Promise((resolve, reject) => {
-            GM_xmlhttpRequest({
-                method: "GET",
-                url: url_s,
-                anonymous: false,
-                onload: xhr => {
-                    let response = parseHTML(xhr.responseText);
+        // 无连字符的番号要先补成站点收录的写法，否则直接 404
+        fh_query = canonicalCode(fh_query);
 
-                    // 获取所有搜索结果，找到与原始番号完全匹配的结果
-                    let movieBoxes = response.find("a.movie-box");
-                    let matchedBox = null;
-
-                    movieBoxes.each(function() {
-                        let box = $(this);
-                        let boxFh = box.find("div.photo-info date:first").html();
-                        if (boxFh) {
-                            // 完全匹配（忽略大小写）
-                            if (boxFh.toUpperCase() === fh.toUpperCase()) {
-                                matchedBox = box;
-                                return false; // 找到匹配的，退出循环
-                            }
-                            // 也检查带连字符和不带连字符的情况
-                            let normalizedBoxFh = boxFh.toUpperCase().replace(/-/g, '');
-                            let normalizedFh = fh.toUpperCase().replace(/-/g, '');
-                            if (normalizedBoxFh === normalizedFh) {
-                                matchedBox = box;
-                                return false;
-                            }
-                        }
-                    });
-
-                    if (matchedBox) {
-                        fh_o = matchedBox.find("div.photo-info date:first").html();
-                        moviePage = matchedBox.attr("href");
+        // 获取搜索结果里与查询番号同一条的记录
+        function pickMovieBox(response, query) {
+            let matchedBox = null;
+            response.find("a.movie-box").each(function() {
+                let box = $(this);
+                let boxFh = box.find("div.photo-info date:first").html();
+                if (boxFh) {
+                    // 完全匹配（忽略大小写）
+                    if (boxFh.toUpperCase() === query.toUpperCase()) {
+                        matchedBox = box;
+                        return false; // 找到匹配的，退出循环
                     }
-                    resolve(moviePage);
+                    // 连字符、前导零都只是写法差异（IPX-15 与 IPX-015 是同一部）
+                    if (normCode(boxFh) === normCode(query)) {
+                        matchedBox = box;
+                        return false;
+                    }
                 }
             });
+            return matchedBox;
+        }
+
+        function searchOnce(query) {
+            return new Promise((resolve) => {
+                GM_xmlhttpRequest({
+                    method: "GET",
+                    url: searchUrl + query,
+                    anonymous: false,
+                    onload: xhr => {
+                        let matchedBox = pickMovieBox(parseHTML(xhr.responseText), query);
+                        if (matchedBox) {
+                            fh_o = matchedBox.find("div.photo-info date:first").html();
+                            moviePage = matchedBox.attr("href");
+                        }
+                        resolve(matchedBox);
+                    },
+                    onerror: () => resolve(null)
+                });
+            });
+        }
+
+        let getJavbusSearch = searchOnce(fh_query).then(matchedBox => {
+            let alt = matchedBox ? null : paddedCode(fh_query);
+            if (!alt) return;
+            return searchOnce(alt);
         });
         function getJavbusDetail(){
             return new Promise((resolve, reject) => {
@@ -982,7 +991,12 @@
 								title = response
 								    .find("h3")
 								    .html();
-								title = title.slice(fh.length+1);
+								// 详情页 h3 是「番号 标题 演员」，按页面上的番号长度裁掉前缀
+								// 不能用 fh 的长度：网盘上的无连字符写法比站点收录的写法长
+								// （IPZZ00871 比 IPZZ-871 多一位），会连标题首字一起裁掉
+								if (title && fh_o && title.startsWith(fh_o)) {
+									title = title.slice(fh_o.length).trim();
+								}
 								// 时间
 								date = response
 								        .find("p:nth-of-type(2)")
@@ -1070,58 +1084,63 @@
         if (/^FC2-PPV-\d{5,8}-C$/i.test(fh_query)) {
             fh_query = fh_query.replace(/-C$/i, "");
         }
-        let url_s = searchUrl + fh_query;
-        return new Promise((resolve) => {
-            GM_xmlhttpRequest({
-                method: "GET",
-                url: url_s,
-                onload: xhr => {
-                    let response = parseHTML(xhr.responseText);
+        // 无连字符的番号要先补成站点收录的写法，否则搜不到结果
+        fh_query = canonicalCode(fh_query);
 
-                    let movieItems = response.find(".movie-list .item");
-                    if (!movieItems.length) {
-                        movieItems = response.find(".grid-item, .movie-list a, [class*='movie'] .item");
-                    }
-                    console.log('[115RenamePlus] JavDB搜索:', url_s, '结果数:', movieItems.length);
-                    let matchedItem = null;
+        // 获取搜索结果里与查询番号同一条的记录
+        function pickMovieItem(response, query) {
+            let movieItems = response.find(".movie-list .item");
+            if (!movieItems.length) {
+                movieItems = response.find(".grid-item, .movie-list a, [class*='movie'] .item");
+            }
+            console.log('[115RenamePlus] JavDB搜索:', searchUrl + query, '结果数:', movieItems.length);
+            let matchedItem = null;
 
-                    function normCode(s) {
-                        if (!s) return "";
-                        let x = String(s).toUpperCase().replace(/[\s\-_]/g, "");
-                        if (x.startsWith("FC2")) x = x.replace(/PPV/g, "");
-                        return x;
-                    }
+            movieItems.each(function() {
+                let item = $(this);
+                let itemFh = item.find(".video-title strong").text().trim();
+                if (!itemFh) return;
 
-                    movieItems.each(function() {
-                        let item = $(this);
-                        let itemFh = item.find(".video-title strong").text().trim();
-                        if (!itemFh) return;
+                let a = itemFh.toUpperCase();
+                let b = query.toUpperCase();
 
-                        let a = itemFh.toUpperCase();
-                        let b = fh_query.toUpperCase();
-
-                        if (a === b) { matchedItem = item; return false; }
-                        if (normCode(a) === normCode(b)) { matchedItem = item; return false; }
-                        if (b.indexOf("FC2") === 0) {
-                            let aNum = a.match(/FC2[^0-9]*(\d{5,8})/i);
-                            let bNum = b.match(/FC2[^0-9]*(\d{5,8})/i);
-                            if (aNum && bNum && aNum[1] === bNum[1]) { matchedItem = item; return false; }
-                        }
-                    });
-
-                    if (!matchedItem) return resolve(null);
-                    let href = matchedItem.find("a").attr("href");
-                    if (!href) return resolve(null);
-                    resolve({
-                        fh_o: matchedItem.find(".video-title strong").text().trim(),
-                        moviePage: javdbBase + href
-                    });
-                },
-                onerror: (e) => {
-                    console.log('[115RenamePlus] JavDB请求失败:', e);
-                    resolve(null);
+                if (a === b) { matchedItem = item; return false; }
+                if (normCode(a) === normCode(b)) { matchedItem = item; return false; }
+                if (b.indexOf("FC2") === 0) {
+                    let aNum = a.match(/FC2[^0-9]*(\d{5,8})/i);
+                    let bNum = b.match(/FC2[^0-9]*(\d{5,8})/i);
+                    if (aNum && bNum && aNum[1] === bNum[1]) { matchedItem = item; return false; }
                 }
             });
+            return matchedItem;
+        }
+
+        function searchOnce(query) {
+            return new Promise((resolve) => {
+                GM_xmlhttpRequest({
+                    method: "GET",
+                    url: searchUrl + query,
+                    onload: xhr => resolve(pickMovieItem(parseHTML(xhr.responseText), query)),
+                    onerror: (e) => {
+                        console.log('[115RenamePlus] JavDB请求失败:', e);
+                        resolve(null);
+                    }
+                });
+            });
+        }
+
+        return searchOnce(fh_query).then(matchedItem => {
+            let alt = matchedItem ? null : paddedCode(fh_query);
+            if (!alt) return matchedItem;
+            return searchOnce(alt);
+        }).then(matchedItem => {
+            if (!matchedItem) return null;
+            let href = matchedItem.find("a").attr("href");
+            if (!href) return null;
+            return {
+                fh_o: matchedItem.find(".video-title strong").text().trim(),
+                moviePage: javdbBase + href
+            };
         }).then(info => info ? fetchJavdbDetail(info) : null);
     }
 
@@ -1846,6 +1865,47 @@
     }
 
     /**
+     * 把番号整理成可用于搜索的形式
+     * 网盘上常见的无连字符写法（ipzz00871 / cawd00676）直接拿去搜会 404，
+     * 各站点收录的是 IPZZ-871 / CAWD-676，所以这里补上连字符并去掉补位的前导零。
+     * 已经带连字符的番号（ABC-123 / STAR-590B / FC2-PPV-xxx）原样返回，不动。
+     * @param fh 提取出来的番号
+     * @returns {string} 搜索用的番号
+     */
+    function canonicalCode(fh) {
+        if (!fh) return fh;
+        let m = String(fh).match(/^([A-Z]+)(\d+)$/);
+        if (!m) return fh;
+        return m[1] + "-" + String(parseInt(m[2], 10));
+    }
+
+    /**
+     * 把去零后的短番号补成 3 位再查一次
+     * 有些番号站点按 3 位补零收录（ipvr00010 → IPVR-010），
+     * 去掉前导零只剩一两位时模糊搜索容易搜不到，需要一个备选写法
+     * @param query 已经过 canonicalCode 的番号
+     * @returns {string|null} 补零后的番号，不需要补时返回 null
+     */
+    function paddedCode(query) {
+        let m = String(query).match(/^([A-Z]+)-(\d{1,2})$/);
+        if (!m) return null;
+        return m[1] + "-" + m[2].padStart(3, "0");
+    }
+
+    /**
+     * 比较番号时用的归一化：忽略连字符/下划线/空格，并忽略补位的前导零
+     * 同一部片在不同站点会写成 IPX-15 或 IPX-015，不归一化就会漏匹配
+     * @param s 番号
+     * @returns {string} 归一化结果
+     */
+    function normCode(s) {
+        if (!s) return "";
+        let x = String(s).toUpperCase().replace(/[\s\-_]/g, '');
+        if (x.startsWith("FC2")) x = x.replace(/PPV/g, "");
+        return x.replace(/^([A-Z]+)0+(\d)/, '$1$2');
+    }
+
+    /**
      * 获取详细信息
      * @param text 内容
      * @param title 标题
@@ -1896,7 +1956,16 @@
             title = title.replace(/[-_ ]C$/i, "");
         }
 
-        // 传统格式：CD1, HD2, FHD3, HHB4 等（只在文件名中找，不要从整段 title 末尾取，避免误把日期 03-19 当分段）
+        // 发布组标记：HHB / HHB1 是压制版本标记，不属于番号
+        // 不先摘掉的话，下面「通用」正则会连它的首字母一起吃掉（ipzz00871hhb → IPZZ00871H）
+        // 只处理紧跟在番号数字后面的形式，避免误伤 HHB-123 这类以 HHB 开头的番号
+        let mHhb = title.match(/(\d)[-_ ]?HHB(\d{1,2})?(?![A-Z0-9])/);
+        if (mHhb) {
+            if (mHhb[2]) part = mHhb[2];
+            title = title.replace(mHhb[0], mHhb[1]);
+        }
+
+        // 传统格式：CD1, HD2, FHD3, PART4 等（只在文件名中找，不要从整段 title 末尾取，避免误把日期 03-19 当分段）
         if (!part) {
             part = title.match(/CD\d{1,2}/);
         }if (!part) {
@@ -1904,7 +1973,11 @@
         }if (!part) {
             part = title.match(/FHD\d{1,2}/);
         }if (!part) {
-            part = title.match(/HHB\d{1,2}/);
+            part = title.match(/PART\d{1,2}/);
+        }if (!part) {
+            // 60fps 压制版分片：xxx_4K60fps1 / xxx_4K60fps2
+            let m60 = title.match(/60FPS(\d{1,2})(?![0-9])/);
+            if (m60) part = m60[1];
         }
         if (part){
             part = part.toString().match(/\d+/).toString();
@@ -1912,7 +1985,11 @@
 
 		let if4k;
 		if (!if4k) {
-			if4k = title.match(/(-4K){1}/);
+			// 网盘上多写成 _4K / _4K60fps / _8K，不只是 -4K
+			if4k = title.match(/[-_ ]8K/);
+			if(if4k){ if4k = "-8k";}
+		} if (!if4k) {
+			if4k = title.match(/[-_ ]4K/);
 			if(if4k){ if4k = "-4k";}
 		} if (!if4k) {
 		    if4k = title.match(/(VP9 版){1}/);
