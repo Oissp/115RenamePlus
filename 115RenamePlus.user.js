@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.1-beta.25
+// @version             0.12.1-beta.26
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         根据现有的文件名<番号>查询并修改文件名
@@ -9,12 +9,6 @@
 // @license             MIT
 // @match               https://115.com/*
 // @match               https://web.115.com/*
-// @domain              javbus.com
-// @domain              fanbus.blog
-// @domain              busdmm.club
-// @domain              seedmm.blog
-// @domain              adult.contents.fc2.com
-// @domain              javdb.com
 // @require             https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js
 // @grant               GM_notification
 // @grant               GM_xmlhttpRequest
@@ -25,9 +19,6 @@
 // @connect             javdb.com
 // @connect             www.javbus.com
 // @connect             javbus.com
-// @connect             fanbus.blog
-// @connect             busdmm.club
-// @connect             seedmm.blog
 // @connect             adult.contents.fc2.com
 // @connect             javmeta.checkfact.net
 // ==/UserScript==
@@ -71,7 +62,7 @@
     /**
      * 添加按钮的定时任务
      */
-    let interval = setInterval(buttonInterval, 1000);
+    setInterval(buttonInterval, 1000);
 
     // 安全 HTML 解析：使用 DOMParser 避免浏览器自动加载图片等资源
     const parser = new DOMParser();
@@ -297,7 +288,7 @@
         menu.appendChild(mkItem('JavMeta', '通过自建元数据服务查询并改名（免令牌，只查已收录）', ICON_SELF, () => floatMenuAction(renameJavmeta, 'javmeta')));
         menu.appendChild(mkItem('FC2', '通过 FC2 查询并改名', ICON_FC2, () => floatMenuAction(renameFc2, 'fc2')));
         menu.appendChild(makeDivider());
-        menu.appendChild(mkItem('添加标签', '查番号，用女演员名给文件打标签', ICON_TAG, tagByActorAction));
+        menu.appendChild(mkItem('添加标签', '从 JavMeta 查番号，用女演员名给文件打标签', ICON_TAG, tagByActorAction));
 
         // 主按钮
         const toggle = document.createElement('button');
@@ -696,6 +687,21 @@
     }
 
     /**
+     * 按查询源解析番号
+     * FC2 源一律按 FC2 解析；其余源遇到文件名里带 FC2 的也按 FC2 解析
+     * （文件名前面可能有域名前缀，如 HHD800.COM@FC2-PPV-xxxxxx），否则走通用解析
+     * @param file_name 去掉后缀的文件名
+     * @param site      查询源（fc2 / javbus / javdb / javmeta）
+     * @returns {{fh:string, part:string, if4k:string, fc2C:boolean}|false} 解析结果，未识别到番号返回 false
+     */
+    function extractVideoCode(file_name, site) {
+        if (site === 'fc2' || /FC2(?:[-_ ]?PPV)?/i.test(file_name)) {
+            return getVideoCode(file_name, 'fc2');
+        }
+        return getVideoCode(file_name);
+    }
+
+    /**
      * 直接从 React Fiber 数据触发改名（无需 API 调用，最快路径）
      */
     function renameFromData(fileData, call, site, ifAddDate) {
@@ -714,16 +720,7 @@
 
         if (!fid || !file_name) return;
 
-        let VideoCode;
-        if (site === 'fc2') {
-            VideoCode = getVideoCode(file_name, 'fc2');
-        } else {
-            if (/FC2(?:[-_ ]?PPV)?/i.test(file_name)) {
-                VideoCode = getVideoCode(file_name, 'fc2');
-            } else {
-                VideoCode = getVideoCode(file_name);
-            }
-        }
+        const VideoCode = extractVideoCode(file_name, site);
 
         if (VideoCode && VideoCode.fh) {
             const ifChineseCaptions = VideoCode.fc2C ? true : checkifChineseCaptions(VideoCode.fh, file_name);
@@ -777,16 +774,7 @@
         }
 
         if (fid && file_name) {
-            let VideoCode;
-            if (site === 'fc2') {
-                VideoCode = getVideoCode(file_name, 'fc2');
-            } else {
-                if (/FC2(?:[-_ ]?PPV)?/i.test(file_name)) {
-                    VideoCode = getVideoCode(file_name, 'fc2');
-                } else {
-                    VideoCode = getVideoCode(file_name);
-                }
-            }
+            const VideoCode = extractVideoCode(file_name, site);
 
             if (VideoCode && VideoCode.fh) {
                 const ifChineseCaptions = VideoCode.fc2C ? true : checkifChineseCaptions(VideoCode.fh, file_name);
@@ -893,18 +881,8 @@
                     }
                 }
                 if (fid && file_name) {
-                    let VideoCode;
-                    if (site == "fc2") {
-                        VideoCode = getVideoCode(file_name, "fc2");
-                    } else {
-                        // 兜底：即使不是 fc2 按钮，也尝试识别 FC2 番号（文件名前面可能有域名前缀，如 HHD800.COM@FC2-PPV-xxxxxx）
-                        if (/FC2(?:[-_ ]?PPV)?/i.test(file_name)) {
-                            VideoCode = getVideoCode(file_name, "fc2");
-                        } else {
-                            VideoCode = getVideoCode(file_name);
-                        }
-                    }
-                    if (VideoCode.fh) {
+                    const VideoCode = extractVideoCode(file_name, site);
+                    if (VideoCode && VideoCode.fh) {
                         // 优先使用 FC2-C 标记，如果没有则用常规检查
                         let ifChineseCaptions = VideoCode.fc2C ? true : checkifChineseCaptions(VideoCode.fh, file_name);
                         // 执行查询
@@ -988,7 +966,7 @@
             return searchOnce(alt);
         });
         function getJavbusDetail(){
-            return new Promise((resolve, reject) => {
+            return new Promise((resolve) => {
                 if (moviePage) {
 						GM_xmlhttpRequest({
 							method: "GET",
@@ -1012,10 +990,14 @@
 								        .html();
 								date = date.match(/\d{4}\-\d{2}\-\d{2}/);
 								// 演员们
-								let actorTags = response.find("div.star-name").each(function(){
+								response.find("div.star-name").each(function(){
 									actors.push($(this).find("a").attr("title"));
 								});
 								resolve();
+							},
+							onerror: (e) => {
+								console.log('[115RenamePlus] Javbus详情请求失败:', e);
+								resolve(null);
 							}
 						});
                 } else {
@@ -1024,7 +1006,7 @@
             });
         }
         function setName(){
-            return new Promise((resolve, reject) => {
+            return new Promise((resolve) => {
                 if(moviePage){
                     // 清洗演员：去重、去掉分类标签、把逗号拼接的杂项拆开过滤
                     let actor = actors
@@ -1055,16 +1037,6 @@
     }
 
     /**
-     * 通过 Javdb 进行查询
-     * 请求 Javdb，并请求115进行改名
-     * @param fid               文件id
-     * @param fh                番号
-     * @param suffix            后缀
-     * @param ifChineseCaptions 是否有中文字幕
-     * @param part              视频分段
-     * @param ifAddDate         是否添加时间
-     */
-    /**
      * 把各种 FC2 写法统一成站点收录的 FC2-PPV-xxxxxx，保留 -C（中文字幕）标记
      * 旧 fc2 分支可能只提取出纯数字，也要能补全
      */
@@ -1085,6 +1057,16 @@
         return fh;
     }
 
+    /**
+     * 通过 Javdb 进行查询
+     * 请求 Javdb，并请求115进行改名
+     * @param fid               文件id
+     * @param fh                番号
+     * @param suffix            后缀
+     * @param ifChineseCaptions 是否有中文字幕
+     * @param part              视频分段
+     * @param ifAddDate         是否添加时间
+     */
     function renameJavdb(fid, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate) {
         // 让 javdb 也支持 FC2：把 FC2PPV/数字 统一规范成 JavDB 认可的 FC2-PPV-xxxxxx
         // 同时保留 -C（中文字幕）用于最终文件名（requestJavdb 内部查询会自动去掉 -C）
@@ -1498,9 +1480,9 @@
         resetLabelStore();
         tagQueue = Promise.resolve();
         if (isNewUI()) {
-            renameFromTopBar(tagByActor, 'javdb', true);
+            renameFromTopBar(tagByActor, 'javmeta', true);
         } else {
-            rename(tagByActor, 'javdb', true);
+            rename(tagByActor, 'javmeta', true);
         }
     }
 
@@ -1515,16 +1497,17 @@
 
     /**
      * 查番号取女演员名，作为标签打到文件上
+     * 走 JavMeta：服务端的 `actresses` 是按同一套规则派生的，而且不直连 JavDB
      */
     async function tagOneFile(fid, fh) {
-        const info = await fetchJavdbInfo(fh, javdbSearch);
-        if (!info) {
-            console.log('[115RenamePlus] JavDB未查到结果:', fh);
-            GM_notification(getDetails(fh, 'JavDB未查到结果'));
+        const res = await fetchJavmetaInfo(normalizeFc2Code(fh));
+        if (!res.ok) {
+            console.log('[115RenamePlus] JavMeta未查到结果:', fh, res.msg);
+            GM_notification(getDetails(fh, res.msg));
             return;
         }
 
-        const actors = info.actors || [];
+        const actors = res.info.actors || [];
         if (!actors.length) {
             GM_notification(getDetails(fh, '未查到女演员'));
             return;
@@ -1625,6 +1608,10 @@
                 } else {
                     GM_notification(getDetails(standardFh, "商品页可能已消失"));
                 }
+            },
+            onerror: (e) => {
+                console.log('[115RenamePlus] FC2请求失败:', e);
+                GM_notification(getDetails(fh, "FC2请求失败"));
             }
         })
     }
@@ -2135,7 +2122,6 @@
 			if (!t) {
 				let m = title.match(/(?:^|[^A-Z0-9])(FC2)(?:[\-_ ]{0,2}(PPV))?[\-_ ]{0,2}(\d{5,8})(?:[\-_ ]{0,2}([0-9]{1,2}|[A-Z]))?(?:[\-_ ]{0,2}(C))?(?=$|[^A-Z0-9])/);
 				if (m) {
-					let fc2 = m[1];
 					let num = m[3];
 					let partCandidate = m[4];
 					let cFlag = m[5];

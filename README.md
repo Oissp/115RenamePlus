@@ -6,7 +6,7 @@
 
 | 脚本 | 功能 | 安装 |
 |------|------|------|
-| **115RenamePlus** | 根据文件名番号查询 JavBus / JavDB / FC2 并自动改名 | [安装](https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js) |
+| **115RenamePlus** | 根据文件名番号查询 JavBus / JavDB / JavMeta / FC2 并自动改名 | [安装](https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js) |
 | **115MagnetLink** | 捕捉页面磁力链接，一键保存到 115 云盘 | [安装](https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115MagnetLink.user.js) |
 
 ## 使用
@@ -23,7 +23,10 @@
 
 - **JavDB**：推荐，数据准确
 - **JavBus**：无码资源
+- **JavMeta**：自建元数据服务（[javmeta](https://github.com/Oissp/javmeta)），秒回、不直连 JavDB，只查已收录的番号
 - **FC2**：FC2-PPV 系列
+
+「添加标签」也是走 JavMeta：查女演员名，给选中文件打上同名标签。
 
 ### 115MagnetLink
 
@@ -33,6 +36,7 @@
 
 - 改名失败：确认文件名含有效番号、网络可访问 JavBus / JavDB / FC2
 - 演员含男演员：JavDB 只提取女演员，可改用 JavBus
+- JavMeta 提示「库里还没有」：服务只查已收录的番号，番号已进待补队列，等后台补上再试
 
 ## 致谢
 
