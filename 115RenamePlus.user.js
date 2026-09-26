@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.1-beta.23
+// @version             0.12.1-beta.25
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         根据现有的文件名<番号>查询并修改文件名
@@ -29,6 +29,7 @@
 // @connect             busdmm.club
 // @connect             seedmm.blog
 // @connect             adult.contents.fc2.com
+// @connect             javmeta.checkfact.net
 // ==/UserScript==
 
 (function () {
@@ -40,6 +41,7 @@
     const ICON_FC2  = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>';
     const ICON_TAG  = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="7" cy="7" r="1.5"/></svg>';
     const ICON_CLEAN = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z"/></svg>';
+    const ICON_SELF = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="7" rx="2"/><rect x="2" y="14" width="20" height="7" rx="2"/><path d="M6 6.5h.01M6 17.5h.01"/></svg>';
     // 悬浮按钮主图标
     const RENAME_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>';
     // 悬浮按钮样式
@@ -87,6 +89,12 @@
 
     let javdbBase = "https://javdb.com";
     let javdbSearch = javdbBase + "/search?q=";
+
+    // 自建元数据服务（hk-server 上的 javmeta），把 JavDB 的数据缓存在本地，
+    // 每个番号只向 JavDB 抓一次，避免改名时频繁直连导致 IP 被封。
+    // 走**免令牌的公开接口**：只查服务端已收录的数据、不发任何出站请求，也不用配令牌
+    // （脚本是公开分发的，令牌没法硬编码进来）。查不到的号服务端会记进待补队列。
+    let javmetaBase = "https://javmeta.checkfact.net";
 
     /**
      * 检测是否为新版UI
@@ -286,6 +294,7 @@
         menu.appendChild(makeDivider());
         menu.appendChild(mkItem('JavBus', '通过 JavBus 查询并改名', ICON_BUS, () => floatMenuAction(renameJavbus, 'javbus')));
         menu.appendChild(mkItem('JavDB', '通过 JavDB 查询并改名', ICON_DB, () => floatMenuAction(renameJavdb, 'javdb')));
+        menu.appendChild(mkItem('JavMeta', '通过自建元数据服务查询并改名（免令牌，只查已收录）', ICON_SELF, () => floatMenuAction(renameJavmeta, 'javmeta')));
         menu.appendChild(mkItem('FC2', '通过 FC2 查询并改名', ICON_FC2, () => floatMenuAction(renameFc2, 'fc2')));
         menu.appendChild(makeDivider());
         menu.appendChild(mkItem('添加标签', '查番号，用女演员名给文件打标签', ICON_TAG, tagByActorAction));
@@ -1055,22 +1064,31 @@
      * @param part              视频分段
      * @param ifAddDate         是否添加时间
      */
-    function renameJavdb(fid, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate) {
-        // 让 javdb 也支持 FC2：把 FC2PPV/数字 统一规范成 JavDB 认可的 FC2-PPV-xxxxxx
-        // 同时保留 -C（中文字幕）用于最终文件名（requestJavdb 内部查询会自动去掉 -C）
+    /**
+     * 把各种 FC2 写法统一成站点收录的 FC2-PPV-xxxxxx，保留 -C（中文字幕）标记
+     * 旧 fc2 分支可能只提取出纯数字，也要能补全
+     */
+    function normalizeFc2Code(fh) {
         if (/^\d{5,8}$/i.test(fh)) {
-            // 来自旧 fc2 分支：只提取了数字
-            fh = "FC2-PPV-" + fh;
-        } else if (/^FC2PPV[-_ ]?\d{5,8}/i.test(fh)) {
-            fh = fh.replace(/^FC2PPV[-_ ]?(\d{5,8})(?:[-_ ]?(C))?$/i, function(_, n, c){
-                return "FC2-PPV-" + n + (c ? "-" + c.toUpperCase() : "");
-            });
-        } else if (/^FC2[-_ ]?PPV[-_ ]?\d{5,8}/i.test(fh)) {
-            fh = fh.replace(/^FC2[-_ ]?PPV[-_ ]?(\d{5,8})(?:[-_ ]?(C))?$/i, function(_, n, c){
+            return "FC2-PPV-" + fh;
+        }
+        if (/^FC2PPV[-_ ]?\d{5,8}/i.test(fh)) {
+            return fh.replace(/^FC2PPV[-_ ]?(\d{5,8})(?:[-_ ]?(C))?$/i, function(_, n, c){
                 return "FC2-PPV-" + n + (c ? "-" + c.toUpperCase() : "");
             });
         }
-        requestJavdb(fid, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate, javdbSearch);
+        if (/^FC2[-_ ]?PPV[-_ ]?\d{5,8}/i.test(fh)) {
+            return fh.replace(/^FC2[-_ ]?PPV[-_ ]?(\d{5,8})(?:[-_ ]?(C))?$/i, function(_, n, c){
+                return "FC2-PPV-" + n + (c ? "-" + c.toUpperCase() : "");
+            });
+        }
+        return fh;
+    }
+
+    function renameJavdb(fid, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate) {
+        // 让 javdb 也支持 FC2：把 FC2PPV/数字 统一规范成 JavDB 认可的 FC2-PPV-xxxxxx
+        // 同时保留 -C（中文字幕）用于最终文件名（requestJavdb 内部查询会自动去掉 -C）
+        requestJavdb(fid, normalizeFc2Code(fh), suffix, if4k, ifChineseCaptions, part, ifAddDate, javdbSearch);
     }
     /**
      * 查询 JavDB：搜索番号 → 打开详情页 → 解析标题、日期、女演员
@@ -1257,6 +1275,95 @@
                 send_115(fid, newName, info.fh_o);
             }
         });
+    }
+
+    /**
+     * 查询自建元数据服务（hk-server 上的 javmeta）
+     * 服务端已经把 JavDB 的数据缓存在本地，同一番号只抓一次，不会反复直连 JavDB
+     * 走的是免令牌公开接口：只查库，所以是秒回；库里有就返回，没有就返回空
+     * @param fh 番号
+     * @returns {Promise<{ok:boolean, info?:{fh_o:string, moviePage:string, title:string, date:string, actors:string[]}, msg?:string}>}
+     */
+    function fetchJavmetaInfo(fh) {
+        let fh_query = fh;
+        if (/^FC2-PPV-\d{5,8}-C$/i.test(fh_query)) {
+            fh_query = fh_query.replace(/-C$/i, "");
+        }
+        fh_query = canonicalCode(fh_query);
+
+        return new Promise((resolve) => {
+            GM_xmlhttpRequest({
+                method: "GET",
+                url: javmetaBase + "/api/v1/public/movie?code=" + encodeURIComponent(fh_query),
+                onload: xhr => {
+                    let res;
+                    try {
+                        res = JSON.parse(xhr.responseText);
+                    } catch (e) {
+                        console.log('[115RenamePlus] JavMeta响应解析失败:', e);
+                        return resolve({ ok: false, msg: "JavMeta响应异常" });
+                    }
+                    if (!res || !res.ok || !res.data) {
+                        console.log('[115RenamePlus] JavMeta未查到结果:', fh_query, res && res.error, res && res.queued);
+                        // cached=true：服务端的负缓存，站点上确实没这个号——重试也不会变
+                        if (res && res.cached) {
+                            return resolve({ ok: false, msg: "JavMeta确认未收录该番号" });
+                        }
+                        // queued=true：库里还没有，服务端已把号记进待补队列，后台补上后重试即可
+                        if (res && res.queued) {
+                            return resolve({ ok: false, msg: "JavMeta库里还没有，已记入待补队列，稍后再试" });
+                        }
+                        return resolve({ ok: false, msg: "JavMeta未查到结果" });
+                    }
+                    let d = res.data;
+                    // partial 是「只抓过列表页」的记录：标题、日期有，片商/系列/演员还是空的，
+                    // 拿它改名会丢掉演员名，等后台补全后再来
+                    if (d.partial) {
+                        console.log('[115RenamePlus] JavMeta记录待补全:', fh_query);
+                        return resolve({ ok: false, msg: "JavMeta这条还没补全，稍后再试" });
+                    }
+                    resolve({
+                        ok: true,
+                        info: {
+                            fh_o: d.code || fh_query,
+                            moviePage: d.source_url,
+                            title: d.title,
+                            date: d.date,
+                            actors: d.actresses || []
+                        }
+                    });
+                },
+                onerror: (e) => {
+                    console.log('[115RenamePlus] JavMeta请求失败:', e);
+                    resolve({ ok: false, msg: "JavMeta请求失败" });
+                }
+            });
+        });
+    }
+
+    /**
+     * 请求JavMeta，并请求115进行改名
+     */
+    function requestJavmeta(fid, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate) {
+        fetchJavmetaInfo(fh).then(res => {
+            if (!res.ok) {
+                console.log('[115RenamePlus] JavMeta未查到结果:', fh, res.msg);
+                GM_notification(getDetails(fh, res.msg));
+                return;
+            }
+            let info = res.info;
+            let newName = buildNewName(info.fh_o, suffix, if4k, ifChineseCaptions, part, info.title, info.date, info.actors.toString(), ifAddDate);
+            if (newName) {
+                send_115(fid, newName, info.fh_o);
+            }
+        });
+    }
+
+    /**
+     * 通过JavMeta查询并改名
+     */
+    function renameJavmeta(fid, fh, suffix, if4k, ifChineseCaptions, part, ifAddDate) {
+        requestJavmeta(fid, normalizeFc2Code(fh), suffix, if4k, ifChineseCaptions, part, ifAddDate);
     }
 
     // ===== 按女演员名打标签 =====
