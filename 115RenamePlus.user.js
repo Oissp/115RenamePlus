@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name                115RenamePlus
 // @namespace           https://github.com/Oissp/115RenamePlus/
-// @version             0.12.1-beta.27
+// @version             0.12.1-beta.28
 // @updateURL           https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @downloadURL         https://raw.githubusercontent.com/Oissp/115RenamePlus/master/115RenamePlus.user.js
 // @description         根据现有的文件名<番号>查询并修改文件名
@@ -689,10 +689,13 @@
      * （文件名前面可能有域名前缀，如 HHD800.COM@FC2-PPV-xxxxxx），否则走通用解析
      * @param file_name 去掉后缀的文件名
      * @param site      查询源（fc2 / javbus / javdb / javmeta）
-     * @returns {{fh:string, part:string, fc2C:boolean}|false} 解析结果，未识别到番号返回 false
+     * @returns {{fh:string, part:string, fc2C:boolean, fhQuery?:string}|false} 解析结果，未识别到番号返回 false
      */
     function extractVideoCode(file_name, site) {
-        if (site === 'fc2' || /FC2(?:[-_ ]?PPV)?/i.test(file_name)) {
+        // 「FC + 5~8 位数字」的简写（FC4871181）也要认出来——它不含 `FC2` 字样，
+        // 只测 /FC2/ 会漏到通用正则里，被啃成 `FC-487118`（一个不存在的番号）。
+        if (site === 'fc2' || /FC2(?:[-_ ]?PPV)?/i.test(file_name) ||
+            /(?:^|[^A-Z0-9])FC[\-_ ]?\d{5,8}/i.test(file_name)) {
             return getVideoCode(file_name, 'fc2');
         }
         return getVideoCode(file_name);
@@ -721,7 +724,7 @@
 
         if (VideoCode && VideoCode.fh) {
             const ifChineseCaptions = VideoCode.fc2C ? true : checkifChineseCaptions(VideoCode.fh, file_name);
-            call(fid, VideoCode.fh, suffix, ifChineseCaptions, VideoCode.part, ifAddDate);
+            call(fid, VideoCode.fh, suffix, ifChineseCaptions, VideoCode.part, ifAddDate, VideoCode.fhQuery);
         } else {
             console.log('[115RenamePlus] 未识别到番号:', file_name);
             GM_notification(getDetails(file_name, '未识别到番号'));
@@ -775,7 +778,7 @@
 
             if (VideoCode && VideoCode.fh) {
                 const ifChineseCaptions = VideoCode.fc2C ? true : checkifChineseCaptions(VideoCode.fh, file_name);
-                call(fid, VideoCode.fh, suffix, ifChineseCaptions, VideoCode.part, ifAddDate);
+                call(fid, VideoCode.fh, suffix, ifChineseCaptions, VideoCode.part, ifAddDate, VideoCode.fhQuery);
             } else {
                 console.log('[115RenamePlus] 未识别到番号:', file_name);
                 GM_notification(getDetails(file_name, '未识别到番号'));
@@ -883,7 +886,7 @@
                         // 优先使用 FC2-C 标记，如果没有则用常规检查
                         let ifChineseCaptions = VideoCode.fc2C ? true : checkifChineseCaptions(VideoCode.fh, file_name);
                         // 执行查询
-                        call(fid, VideoCode.fh, suffix, ifChineseCaptions, VideoCode.part, ifAddDate);
+                        call(fid, VideoCode.fh, suffix, ifChineseCaptions, VideoCode.part, ifAddDate, VideoCode.fhQuery);
                     }
                 }
             });
@@ -1256,73 +1259,171 @@
         });
     }
 
-    /**
-     * 查询 JavMeta：请求接口 → 解析返回的标题、日期、女演员
-     * @param fh 番号
-     * @returns {Promise<{ok:boolean, info?:{fh_o:string, moviePage:string, title:string, date:string, actors:string[]}, msg?:string}>}
-     */
-    function fetchJavmetaInfo(fh) {
-        let fh_query = fh;
-        if (/^FC2-PPV-\d{5,8}-C$/i.test(fh_query)) {
-            fh_query = fh_query.replace(/-C$/i, "");
-        }
-        fh_query = canonicalCode(fh_query);
+    // JavMeta 的公开接口在 Cloudflare 侧有 100 次 / 10 秒 / IP 的限流
+    // （见 javmeta 的 docs/DEPLOY.md 部署记录）。批量改名一次选中几十上百个文件时，
+    // 新版 UI 的循环是不 await 的，等于同时打几十个请求，必然撞上限流——超限回的是
+    // **纯文本** `error code: 1015`，JSON.parse 会失败，用户只看到「响应异常」。
+    // 所以这里自己排队：同一时刻最多 4 个在飞（实测 300 并发会掉 60%，4 个并发稳过）。
+    const JAVMETA_MAX_CONCURRENT = 4;
+    const JAVMETA_RETRY_MAX = 2;
+    let javmetaInFlight = 0;
+    let javmetaWaiters = [];
 
+    function javmetaAcquire() {
+        if (javmetaInFlight < JAVMETA_MAX_CONCURRENT) {
+            javmetaInFlight++;
+            return Promise.resolve();
+        }
+        return new Promise(resolve => javmetaWaiters.push(resolve));
+    }
+
+    function javmetaRelease() {
+        const next = javmetaWaiters.shift();
+        if (next) {
+            // 名额直接交给下一个等待者，计数不变
+            next();
+        } else {
+            javmetaInFlight--;
+        }
+    }
+
+    /**
+     * 查一次 JavMeta 公开接口（不含排队/重试）
+     * @param fh_query 已规范化的查询串
+     * @returns {Promise<{status:number, retryAfter:RegExpMatchArray|null, body:Object|null}>}
+     *          body 为 null 表示响应不是 JSON（典型是 Cloudflare 限流页 `error code: 1015`）
+     */
+    function javmetaRequestOnce(fh_query) {
         return new Promise((resolve) => {
             GM_xmlhttpRequest({
                 method: "GET",
                 url: javmetaBase + "/api/v1/public/movie?code=" + encodeURIComponent(fh_query),
                 onload: xhr => {
-                    let res;
+                    let res = null;
                     try {
                         res = JSON.parse(xhr.responseText);
                     } catch (e) {
-                        console.log('[115RenamePlus] JavMeta响应解析失败:', e);
-                        return resolve({ ok: false, msg: "JavMeta响应异常" });
+                        // 限流时 Cloudflare 回的是纯文本 `error code: 1015`，
+                        // 这里不当成「番号有问题」，交给上层按 429 处理
+                        console.log('[115RenamePlus] JavMeta响应不是 JSON，HTTP ' + xhr.status);
                     }
-                    if (!res || !res.ok || !res.data) {
-                        console.log('[115RenamePlus] JavMeta未查到结果:', fh_query, res && res.error, res && res.queued);
-                        // cached=true：服务端的负缓存，站点上确实没这个号——重试也不会变
-                        if (res && res.cached) {
-                            return resolve({ ok: false, msg: "JavMeta确认未收录该番号" });
-                        }
-                        // queued=true：库里还没有，服务端已把号记进待补队列，后台补上后重试即可
-                        if (res && res.queued) {
-                            return resolve({ ok: false, msg: "JavMeta库里还没有，已记入待补队列，稍后再试" });
-                        }
-                        return resolve({ ok: false, msg: "JavMeta未查到结果" });
-                    }
-                    let d = res.data;
-                    // partial 是「只抓过列表页」的记录：标题、日期有，片商/系列/演员还是空的，
-                    // 拿它改名会丢掉演员名，等后台补全后再来
-                    if (d.partial) {
-                        console.log('[115RenamePlus] JavMeta记录待补全:', fh_query);
-                        return resolve({ ok: false, msg: "JavMeta这条还没补全，稍后再试" });
-                    }
-                    resolve({
-                        ok: true,
-                        info: {
-                            fh_o: d.code || fh_query,
-                            moviePage: d.source_url,
-                            title: d.title,
-                            date: d.date,
-                            actors: d.actresses || []
-                        }
-                    });
+                    resolve({ status: xhr.status, retryAfter: xhr.responseHeaders && /\bretry-after\s*:\s*(\d+)/i.exec(xhr.responseHeaders), body: res });
                 },
                 onerror: (e) => {
                     console.log('[115RenamePlus] JavMeta请求失败:', e);
-                    resolve({ ok: false, msg: "JavMeta请求失败" });
+                    resolve({ status: 0, body: null });
                 }
             });
         });
     }
 
     /**
+     * 查询 JavMeta：请求接口 → 解析返回的标题、日期、女演员
+     * @param fh      番号（写进文件名用的形态）
+     * @param fhQuery 可选：查 JavMeta 用的写法。無碼那几家在库里是**带站点前缀**的
+     *                （CARIB-101026-001 / 10MUSUME-101026_01 / TOKYOHOT-kb1650），
+     *                裸号送过去在四家共用的「日期_序号」上分不出是哪一部。
+     * @returns {Promise<{ok:boolean, info?:{fh_o:string, moviePage:string, title:string, date:string, actors:string[]}, msg?:string}>}
+     */
+    function fetchJavmetaInfo(fh, fhQuery) {
+        let fh_query = fhQuery || fh;
+        if (/^FC2-PPV-\d{5,8}-C$/i.test(fh_query)) {
+            fh_query = fh_query.replace(/-C$/i, "");
+        }
+        // 带站点前缀 / TOKYOHOT- 的写法原样送，canonicalCode 只处理纯「字母+数字」
+        fh_query = canonicalCode(fh_query);
+
+        // FC2 号别送：服务端的 SCRAPERS 里没有 fc2 源，这个号只会被记进待补队列，
+        // 然后一直等一个永远不会来的结果。早期版本就直接连站点，这里一样。
+        if (/^FC2[-_ ]?(?:PPV[-_ ]?)?\d{5,8}$/i.test(fh_query)) {
+            return Promise.resolve({ ok: false, msg: "JavMeta 不收录 FC2，请用菜单里的「FC2」查询" });
+        }
+
+        function attempt(n) {
+            return javmetaAcquire().then(() => {
+                // 名额只释放一次：下面无论走哪条分支（含抛异常）都由 done() 收口，
+                // 二次释放会把并发计数减成负数、放行超过上限的请求
+                let released = false;
+                function done() {
+                    if (released) return;
+                    released = true;
+                    javmetaRelease();
+                }
+                return javmetaRequestOnce(fh_query).then(r => {
+                    done();
+                    // 429：Cloudflare 限流。retry-after 是秒，按它退避后再来，
+                    // 重试有上限，避免一个号把整个批量拖住
+                    if (r.status === 429 && n < JAVMETA_RETRY_MAX) {
+                        let wait = Math.min(parseInt(r.retryAfter && r.retryAfter[1], 10) || 2, 10);
+                        console.log('[115RenamePlus] JavMeta被限流，' + wait + 's 后重试:', fh_query);
+                        return new Promise(ok => setTimeout(ok, wait * 1000)).then(() => attempt(n + 1));
+                    }
+                    if (r.status === 429) {
+                        return { ok: false, msg: "JavMeta请求过于频繁，请稍后重试" };
+                    }
+                    return interpret(r.body === null ? null : r.body);
+                }, (e) => {
+                    done();
+                    console.log('[115RenamePlus] JavMeta查询异常:', e);
+                    return { ok: false, msg: "JavMeta请求失败" };
+                });
+            });
+        }
+
+        function interpret(res) {
+            if (!res) {
+                return { ok: false, msg: "JavMeta响应异常" };
+            }
+            if (!res.ok || !res.data) {
+                let err = String(res.error || "");
+                console.log('[115RenamePlus] JavMeta未查到结果:', fh_query, err, res.queued);
+                // 「番号不唯一」：同一串「日期_序号」在几家無碼发行商各有一部不同的片，
+                // 服务端**不替用户挑**。这个分支也带 cached:true，所以必须排在
+                // cached 判断之前，否则会被误说成「确认未收录该番号」。
+                if (err.indexOf("番号不唯一") === 0 && Array.isArray(res.candidates) && res.candidates.length) {
+                    let codes = res.candidates.map(c => c.code).filter(Boolean);
+                    return {
+                        ok: false,
+                        msg: "该番号在多家发行商都有（" + codes.join(" / ") + "），文件名里保留站点前缀再试"
+                    };
+                }
+                // cached=true：服务端的负缓存，站点上确实没这个号——重试也不会变
+                if (res.cached) {
+                    return { ok: false, msg: "JavMeta确认未收录该番号" };
+                }
+                // queued=true：库里还没有，服务端已把号记进待补队列，后台补上后重试即可
+                if (res.queued) {
+                    return { ok: false, msg: "JavMeta库里还没有，已记入待补队列，稍后再试" };
+                }
+                return { ok: false, msg: "JavMeta未查到结果" };
+            }
+            let d = res.data;
+            // partial 是「只抓过列表页」的记录：标题、日期有，片商/系列/演员还是空的，
+            // 拿它改名会丢掉演员名，等后台补全后再来
+            if (d.partial) {
+                console.log('[115RenamePlus] JavMeta记录待补全:', fh_query);
+                return { ok: false, msg: "JavMeta这条还没补全，稍后再试" };
+            }
+            return {
+                ok: true,
+                info: {
+                    fh_o: d.code || fh_query,
+                    moviePage: d.source_url,
+                    title: d.title,
+                    date: d.date,
+                    actors: d.actresses || []
+                }
+            };
+        }
+
+        return attempt(0);
+    }
+
+    /**
      * 请求 JavMeta，并请求 115 进行改名
      */
-    function requestJavmeta(fid, fh, suffix, ifChineseCaptions, part, ifAddDate) {
-        fetchJavmetaInfo(fh).then(res => {
+    function requestJavmeta(fid, fh, suffix, ifChineseCaptions, part, ifAddDate, fhQuery) {
+        fetchJavmetaInfo(fh, fhQuery).then(res => {
             if (!res.ok) {
                 console.log('[115RenamePlus] JavMeta未查到结果:', fh, res.msg);
                 GM_notification(getDetails(fh, res.msg));
@@ -1338,9 +1439,11 @@
 
     /**
      * 通过 JavMeta 查询并改名
+     * @param fhQuery extractVideoCode 给出的 JavMeta 专用写法（带站点前缀的無碼号等），
+     *                没有就按 fh 走
      */
-    function renameJavmeta(fid, fh, suffix, ifChineseCaptions, part, ifAddDate) {
-        requestJavmeta(fid, normalizeFc2Code(fh), suffix, ifChineseCaptions, part, ifAddDate);
+    function renameJavmeta(fid, fh, suffix, ifChineseCaptions, part, ifAddDate, fhQuery) {
+        requestJavmeta(fid, normalizeFc2Code(fh), suffix, ifChineseCaptions, part, ifAddDate, fhQuery);
     }
 
     // ===== 按女演员名打标签 =====
@@ -1484,18 +1587,19 @@
     /**
      * 打标签回调，签名与改名回调保持一致，好复用选文件的流程
      */
-    function tagByActor(fid, fh) {
+    function tagByActor(fid, fh, suffix, ifChineseCaptions, part, ifAddDate, fhQuery) {
         tagQueue = tagQueue
-            .then(() => tagOneFile(fid, fh))
+            .then(() => tagOneFile(fid, fh, fhQuery))
             .catch(e => console.log('[115RenamePlus] 打标签异常:', e));
     }
 
     /**
      * 查番号取女演员名，作为标签打到文件上
      * 走 JavMeta：服务端的 `actresses` 只含女演员
+     * @param fhQuery 可选：查 JavMeta 专用写法（带站点前缀的無碼号等）
      */
-    async function tagOneFile(fid, fh) {
-        const res = await fetchJavmetaInfo(normalizeFc2Code(fh));
+    async function tagOneFile(fid, fh, fhQuery) {
+        const res = await fetchJavmetaInfo(normalizeFc2Code(fh), fhQuery);
         if (!res.ok) {
             console.log('[115RenamePlus] JavMeta未查到结果:', fh, res.msg);
             GM_notification(getDetails(fh, res.msg));
@@ -1626,17 +1730,21 @@
             return true;
         }
         // 检查标题中是否包含明确的字幕标识，如"C"字符（但不是作为番号一部分）
-        // 排除番号本身包含C的情况，只看标题中其他位置的C
-        let regExp = new RegExp("[_-]?C(?!D)");
-        let match = title.toUpperCase().match(regExp);
-        if (match) {
+        // **C 前面得有分隔符，或者就在结尾**：原来是 `[_-]?C(?!D)`，那个 `?` 等于
+        // 「任意位置的一个 C」都算——`CARIB-101026-001` 里的 C（站点前缀）会被判成
+        // 中文字幕，改出来的名字凭空多一个 `-C`。無碼那几家的站点前缀全带 C，
+        // 正好踩满。保留 `C$` 是为了不改变 `STAR-590B` / `SSIS-001C` 这类
+        // 「末位字母＝标记」的老行为。
+        let regExp = new RegExp("[-_ .]C(?!D)|C$");
+        // 用 match.index 定位，而不是 indexOf(match[0])：正则会连前面的分隔符一起匹配
+        // （`-C`），而 indexOf 找的是「整段第一次出现」，标题里别的 `-C` 会把位置算错。
+        let m = title.toUpperCase().match(regExp);
+        if (m) {
             // 确保匹配到的C不在番号部分
             let upperTitle = title.toUpperCase();
             let fhUpper = fh.toUpperCase();
-            let cMatch = match[0];
-
-            // 查找匹配到的C在标题中的位置
-            let cIndex = upperTitle.indexOf(cMatch);
+            // C 在匹配段里的偏移：`-C` / ` C` 这种是最后一位，`C$` 也是最后一位
+            let cIndex = m.index + m[0].length - 1;
             // 查找番号在标题中的位置
             let fhIndex = upperTitle.indexOf(fhUpper);
             let fhEndIndex = fhIndex + fhUpper.length;
@@ -1942,6 +2050,19 @@
         // 第3层：任意数字+字母@ 格式（覆盖 1start00558@ / javbus@ 等）
         title = title.replace(/^\s*[a-z0-9]+@/i, '');
 
+        // 第4层：域名与番号之间**不是 @** 的那些写法（[HHD800.COM]ABC-123 /
+        // HHD800.COM_ABC-123 / HHD800.COM ABC-123 / 【hhd800.com】ABC-123）。
+        // 前三种是网盘转存时常见的形态，以前漏掉了：通用正则会把它连写成
+        // HHD800 这种假番号，再补成 HHD-800 灌进服务端的待补队列（线上实测
+        // HHD-800 被要过 11 次，排在队列第二，纯粹是脏数据）。
+        // 番号本身永远不含「.」，所以「带点且带 TLD 的整段」只可能是域名。
+        // **必须留够剩下的内容**：`ABC-123.mp4` 这种整串长得像域名的，摘掉就成空串
+        // （调用方传进来的通常已经剥过后缀，这里兜住直接调用的情况）。
+        let mDomain = title.match(/^[\s\[\(（【]*[a-z0-9][a-z0-9.\-]*\.[a-z]{2,6}(?![a-z0-9])[\s\]\)）】]*[ _-]?/i);
+        if (mDomain && mDomain[0].length < title.length) {
+            title = title.slice(mDomain[0].length);
+        }
+
         // 特殊硬编码：无 @ 的前缀
         title = title
             .replace(/^BIG2048\.COM\s*/i, '')
@@ -2070,6 +2191,12 @@
         }
 
 		let t = '';
+		// 查 JavMeta 用的番号写法。**和 fh 有意分开**：fh 是写进文件名的形态
+		// （沿用各站点习惯的裸号），而 JavMeta 库里無碼那几家存的是**带站点前缀**
+		// 的键（`CARIB-101026-001` / `10MUSUME-101026_01` / `TOKYOHOT-kb1650`）。
+		// 裸号送过去在四家共用的编号上分不出是哪一部，只会拿到「番号不唯一」。
+		// 为 null 时调用方按 fh 走（普通番号不受影响）。
+		let fhQuery = null;
 		if (type=="fc2"){
 			// 支持：
 			// - FC2PPV-3281892 / FC2-PPV-3281892 / FC2 PPV 3281892
@@ -2112,43 +2239,80 @@
 
 		}else {
 			t = title.match(/T28[\-_]\d{3,4}/);
-			// 一本道
+			// 一本道（序号固定 3 位）
 			if (!t) {
-				t = title.match(/1PONDO[\-_ ]\d{6}[\-_]\d{2,4}/);
-				if (t) {
-					t = t.toString().replace("1PONDO_", "")
-						.replace("1PONDO-", "");
+				let m1p = title.match(/1PONDO[\-_ ]?(\d{6})[\-_](\d{1,4})(?!\d)/);
+				if (m1p) {
+					// fh 仍是裸号（JavBus / JavDB 认它，保持老行为不变）；
+					// JavMeta 库里存的是带站点前缀的键，走 fhQuery。
+					// 序号要补到站点惯例的宽度：服务端 `1PONDO-101026-1` 是
+					// notfound，`1PONDO-101026-001` 才命中。
+					let seq = m1p[2].replace(/^0+(?=\d)/, "").padStart(3, "0");
+					t = m1p[1] + "-" + seq;
+					fhQuery = "1PONDO-" + m1p[1] + "-" + seq;
 				}
 			}if (!t) {
-				//10MUSUME
-				t = title.match(/10MUSUME[\-_]\d{6}[\-_]\d{2,4}/);
-				if (t) {
-					t = t.toString().replace("10MUSUME", "")
-						.replace("10MUSUME-", "");
+				//10MUSUME（序号固定 2 位）
+				let m10mu = title.match(/10MUSUME[\-_ ]?(\d{6})[\-_](\d{1,4})(?!\d)/);
+				if (m10mu) {
+					// 原来这里先 replace("10MUSUME","") 再 replace("10MUSUME-","")：
+					// 第一条就把前缀连分隔符一起去掉了，剩下 `-101026_01`——
+					// 带前导横线的「番号」服务端形状门直接判非法（queued:false），
+					// 永远查不到。改成整段一起摘。
+					let seq = m10mu[2].replace(/^0+(?=\d)/, "").padStart(2, "0");
+					t = m10mu[1] + "-" + seq;
+					fhQuery = "10MUSUME-" + m10mu[1] + "-" + seq;
+				}
+			}
+			if (!t) {
+				// PACOPACOMAMA（パコパコママ，序号 3 位）。**必须排在通用正则之前**：
+				// 它的前缀长 12 个字母，通用那条 `[A-Z]{2,10}` 从第 3 个字符开始吃，
+				// 得到 `COPACOMAMA-091726` —— 前缀残了、后面的序号也丢了，
+				// 服务端只能当垃圾号记进待补队列。
+				let mPaco = title.match(/PACOPACOMAMA[\-_ ]?(\d{5,6})[\-_](\d{1,3})(?!\d)/);
+				if (mPaco) {
+					// 5 位的日期（`91726` = 091726）是老库里的另一种写法，补回 6 位
+					let date = mPaco[1].padStart(6, "0");
+					let seq = mPaco[2].padStart(3, "0");
+					t = date + "-" + seq;
+					fhQuery = "PACOPACOMAMA-" + date + "-" + seq;
 				}
 			}
 			if (!t) {
 				t = title.match(/HEYZO[\-_]{0,1}\d{4}/);
 			}
 			if (!t) {
-				// 加勒比
-				t = title.match(/CARIB[\-_ ]\d{6}[\-_]\d{3}/);
-				if (t) {
-					t = t.toString().replace("CARIB-", "")
-						.replace("CARIB_", "");
+				// 加勒比（序号 3 位）
+				let mCarib = title.match(/CARIB[\-_ ]?(\d{6})[\-_](\d{1,3})(?!\d)/);
+				if (mCarib) {
+					let seq = mCarib[2].padStart(3, "0");
+					t = mCarib[1] + "-" + seq;
+					fhQuery = "CARIB-" + mCarib[1] + "-" + seq;
 				}
 			}if (!t) {
-				// 加勒比
-				t = title.match(/CARIBBEAN[\-_ ]\d{6}[\-_]\d{3}/);
-				if (t) {
-					t = t.toString().replace("CARIBBEAN-", "")
-						.replace("CARIBBEAN", "");
+				// 加勒比（CARIBBEAN 是站点名，库里的番号前缀是 CARIB-；服务端
+				// 只认 CARIB，`CARIBBEAN-101026-001` 实测 notfound）
+				let mCaribbean = title.match(/CARIBBEAN[\-_ ]?(\d{6})[\-_]?(\d{1,3})(?!\d)/);
+				if (mCaribbean) {
+					let seq = mCaribbean[2].padStart(3, "0");
+					t = mCaribbean[1] + "-" + seq;
+					fhQuery = "CARIB-" + mCaribbean[1] + "-" + seq;
 				}
 			}
 			if (!t) {
 				// 东京热（N 前必须是边界，否则会误匹配 MAAN-1190 内部的 N-1190）
 				let mTokyo = title.match(/(?:^|[^A-Z0-9])(N[-_]\d{4})/);
 				if (mTokyo) t = mTokyo[1];
+			}
+			if (!t) {
+				// 东京热用商品 id（kb1650 / k0001 / n1234）。**这个 id 不可逆**：
+				// 走通用正则会变成 KB-1650 / K-1，服务端只认 `TOKYOHOT-<product id>`，
+				// 所以文件名里带 TOKYOHOT / 東京熱 标记时保留原始 id。
+				let mTh = title.match(/(?:TOKYO[\-_ ]?HOT|東京熱)[\s\-_\[\]【】]*([A-Z]{0,2}\d{3,5})/i);
+				if (mTh) {
+					t = mTh[1];
+					fhQuery = "TOKYOHOT-" + mTh[1].toLowerCase();
+				}
 			}
 			if (!t) {
 				// Jukujo-Club | 熟女俱乐部
@@ -2230,6 +2394,9 @@
                 part: part,
                 // FC2-C 字幕标记：如果之前移除了 -C，这里告诉调用者这是中文字幕版本
                 fc2C: fc2CFlag || undefined,
+                // 查 JavMeta 用的写法（带站点前缀的無碼号 / 东京热商品 id）；
+                // 普通番号是 null，调用方自己按 fh 走
+                fhQuery: fhQuery || undefined,
             };
         }
     }

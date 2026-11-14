@@ -23,10 +23,12 @@
 
 - **JavDB**：推荐，数据准确
 - **JavBus**：无码资源
-- **JavMeta**：番号覆盖不全
+- **JavMeta**：番号覆盖不全；**不收录 FC2**（FC2 请用「FC2」项）；無碼号（CARIB / 1PONDO / 10MUSUME / PACOPACOMAMA / HEYZO / TOKYOHOT）库里存的是带站点前缀的写法，脚本会自动按那个写法查，文件名里保留站点前缀命中率更高
 - **FC2**：FC2-PPV 系列
 
 「添加标签」也是走 JavMeta：查女演员名，给选中文件打上同名标签。
+
+JavMeta 那条路自己排队（同时最多 4 个请求）并对限流（HTTP 429）按 `retry-after` 退避重试（最多两次），批量改名不会因为请求过密整批失败。
 
 ### 115MagnetLink
 
@@ -37,6 +39,7 @@
 - 改名失败：确认文件名含有效番号、网络可访问 JavBus / JavDB / FC2 / JavMeta
 - 演员含男演员：JavDB 只提取女演员，可改用 JavBus
 - JavMeta 查不到：稍后重试，或改用 JavDB / JavBus
+- 提示「该番号在多家发行商都有」：同一串「日期_序号」在几家無碼发行商各有一部不同的片，服务端不替用户挑。把文件名里的站点前缀（如 `CARIB` / `1PONDO`）留着再试
 
 ## 致谢
 
